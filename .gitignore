@@ -1,0 +1,42 @@
+# Dependencies
+api/vendor/
+node_modules/
+
+# Environment / Secrets
+api/.env
+.env
+.env.local
+.env.*.local
+
+# Lumen / Laravel
+api/storage/logs/*.log
+api/storage/framework/cache/data/*
+api/storage/framework/sessions/*
+api/storage/framework/views/*.php
+api/storage/framework/testing/*
+api/bootstrap/cache/*.php
+
+# Uploads (productos)
+api/public/uploads/productos/*
+!api/public/uploads/productos/.gitkeep
+
+# IDE / Editor
+.vscode/sftp.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+laravel.log
+
+# ZIPs / temp
+*.zip
+*.tar.gz
+*.bak

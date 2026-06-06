@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#6366F1">
+    <title>Pedidos Cruz - Sistema de Gestión de Pedidos</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="css/app.css?v=5">
+</head>
+<body>
+
+    <!-- LOADING SCREEN -->
+    <div id="loading-screen">
+        <div class="loading-logo"><i class="fas fa-boxes-stacked"></i></div>
+        <div class="loading-title">Pedidos Cruz</div>
+        <div class="loading-subtitle">Sistema de Gestión de Pedidos</div>
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- LOGIN PAGE -->
+    <div id="login-page" class="hidden">
+        <div class="login-bg-shapes">
+            <span></span><span></span><span></span>
+        </div>
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-icon"><i class="fas fa-boxes-stacked"></i></div>
+                <h1>Pedidos Cruz</h1>
+                <p>Ingresa tus credenciales para continuar</p>
+            </div>
+            <div class="login-error" id="login-error">
+                <i class="fas fa-exclamation-circle"></i>
+                <span id="login-error-text"></span>
+            </div>
+            <form id="login-form">
+                <div class="form-group">
+                    <label>Correo electrónico</label>
+                    <div class="input-wrapper">
+                        <input type="email" id="login-email" class="has-icon" placeholder="tu@correo.com" required>
+                        <i class="fas fa-envelope"></i>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Contraseña</label>
+                    <div class="input-wrapper pass-wrap">
+                        <input type="password" id="login-password" class="has-icon" placeholder="Tu contraseña" required>
+                        <i class="fas fa-lock"></i>
+                        <button type="button" class="pass-toggle" onclick="togglePassword(this)" tabindex="-1"><i class="fas fa-eye"></i></button>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-lg btn-block" id="login-btn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Iniciar Sesión
+                </button>
+            </form>
+            <div style="text-align:center;margin-top:18px;padding-top:16px;border-top:1px solid var(--border-light)">
+                <a href="catalogo.html" style="color:var(--primary);font-size:14px;font-weight:600;text-decoration:none">
+                    <i class="fas fa-eye"></i> Ver catálogo de productos
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- APP SHELL -->
+    <div id="app" class="hidden">
+        <!-- Sidebar Overlay (mobile) -->
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+        <!-- Sidebar -->
+        <aside id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-brand">
+                    <div class="sidebar-brand-icon"><i class="fas fa-boxes-stacked"></i></div>
+                    <div class="sidebar-brand-text">
+                        <h2>Pedidos Cruz</h2>
+                        <span>Sistema de Gestión</span>
+                    </div>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="sidebar-section nav-admin-only">
+                    <div class="sidebar-section-title">Principal</div>
+                    <a class="nav-item active" data-page="dashboard">
+                        <i class="fas fa-chart-pie"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </div>
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Gestión</div>
+                    <a class="nav-item" data-page="pedidos">
+                        <i class="fas fa-file-invoice"></i>
+                        <span>Pedidos</span>
+                        <span class="badge" id="badge-pendientes" style="display:none"></span>
+                    </a>
+                    <a class="nav-item" data-page="nuevo-pedido">
+                        <i class="fas fa-cart-plus"></i>
+                        <span>Nuevo Pedido</span>
+                    </a>
+                    <a class="nav-item" data-page="clientes">
+                        <i class="fas fa-users"></i>
+                        <span>Clientes</span>
+                    </a>
+                    <a class="nav-item nav-admin-only" data-page="productos">
+                        <i class="fas fa-box-open"></i>
+                        <span>Productos</span>
+                    </a>
+                </div>
+                <div class="sidebar-section nav-admin-only" id="nav-despacho">
+                    <div class="sidebar-section-title">Despacho</div>
+                    <a class="nav-item" data-page="despacho">
+                        <i class="fas fa-truck"></i>
+                        <span>Generar Despacho</span>
+                    </a>
+                    <a class="nav-item" data-page="rutas">
+                        <i class="fas fa-route"></i>
+                        <span>Rutas</span>
+                    </a>
+                </div>
+                <div class="sidebar-section nav-admin-only" id="nav-analisis">
+                    <div class="sidebar-section-title">Análisis</div>
+                    <a class="nav-item" data-page="reportes">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Reportes</span>
+                    </a>
+                </div>
+                <div class="sidebar-section" id="nav-admin" style="display:none">
+                    <div class="sidebar-section-title">Administración</div>
+                    <a class="nav-item" data-page="usuarios">
+                        <i class="fas fa-user-shield"></i>
+                        <span>Usuarios</span>
+                    </a>
+                    <a class="nav-item" data-page="categorias">
+                        <i class="fas fa-tags"></i>
+                        <span>Categorías</span>
+                    </a>
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="sidebar-user" id="sidebar-user-btn" title="Editar mi perfil">
+                    <div class="sidebar-user-avatar" id="user-avatar">A</div>
+                    <div class="sidebar-user-info">
+                        <h4 id="user-name">Usuario</h4>
+                        <span id="user-role">vendedor</span>
+                    </div>
+                    <i class="fas fa-user-edit" style="color:var(--text-muted)" title="Mi perfil"></i>
+                </div>
+                <button class="nav-item" id="sidebar-logout-btn" style="margin-top:6px;border:none;width:100%;background:none;text-align:left;cursor:pointer">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Cerrar Sesión</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <div id="main-content">
+            <header id="app-header">
+                <button class="header-menu-btn" id="menu-btn"><i class="fas fa-bars"></i></button>
+                <h1 class="header-title" id="header-title">Dashboard</h1>
+                <div class="header-spacer"></div>
+                <div class="header-actions">
+                    <button class="btn btn-primary btn-sm" id="header-action-btn" style="display:none">
+                        <i class="fas fa-plus"></i> <span id="header-action-text">Nuevo</span>
+                    </button>
+                </div>
+            </header>
+            <div id="page-container"></div>
+        </div>
+    </div>
+
+    <!-- MODAL -->
+    <div id="modal-overlay">
+        <div class="modal-container" id="modal-container">
+            <div class="modal-header">
+                <h3 id="modal-title">Modal</h3>
+                <button class="modal-close" id="modal-close-btn"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-footer" id="modal-footer"></div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast-container"></div>
+
+    <script src="js/app.js?v=44"></script>
+</body>
+</html>
