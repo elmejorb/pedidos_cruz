@@ -97,6 +97,86 @@ function closeModal() {
 }
 
 // ========================================
+// COLOR PICKER
+// ========================================
+const COLOR_PALETTE = [
+    // Fila 1 - tonos claros
+    '#FCA5A5', '#FDBA74', '#FCD34D', '#BEF264', '#6EE7B7', '#5EEAD4', '#7DD3FC', '#A5B4FC', '#D8B4FE', '#F9A8D4',
+    // Fila 2 - tonos medios
+    '#F87171', '#FB923C', '#FBBF24', '#A3E635', '#34D399', '#2DD4BF', '#38BDF8', '#818CF8', '#C084FC', '#F472B6',
+    // Fila 3 - tonos base
+    '#EF4444', '#F97316', '#F59E0B', '#84CC16', '#10B981', '#14B8A6', '#0EA5E9', '#6366F1', '#A855F7', '#EC4899',
+    // Fila 4 - tonos oscuros
+    '#B91C1C', '#C2410C', '#B45309', '#4D7C0F', '#047857', '#0F766E', '#0369A1', '#4338CA', '#7E22CE', '#BE185D',
+    // Fila 5 - neutros
+    '#F8FAFC', '#E2E8F0', '#CBD5E1', '#94A3B8', '#64748B', '#475569', '#334155', '#1E293B', '#0F172A', '#000000',
+];
+
+function normalizeHex(value) {
+    if (!value) return null;
+    let hex = String(value).trim().toUpperCase();
+    if (hex[0] !== '#') hex = '#' + hex;
+    if (/^#[0-9A-F]{3}$/.test(hex)) hex = '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+    return /^#[0-9A-F]{6}$/.test(hex) ? hex : null;
+}
+
+/**
+ * HTML de un selector de color (paleta + color personalizado).
+ * El valor se lee con getColorPickerValue(id).
+ */
+function colorPickerHTML(id, selected = '#6366F1') {
+    const value = normalizeHex(selected) || '#6366F1';
+    return `
+        <div class="color-picker" id="${id}" data-color="${value}">
+            <div class="color-palette">
+                ${COLOR_PALETTE.map(c => `
+                    <div class="color-swatch${c === value ? ' selected' : ''}" data-color="${c}"
+                         style="background:${c}" title="${c}"></div>
+                `).join('')}
+            </div>
+            <div class="color-picker-custom">
+                <label>Personalizado</label>
+                <input type="color" class="cp-native" value="${value}">
+                <input type="text" class="cp-hex" value="${value}" maxlength="7" spellcheck="false">
+                <div class="color-picker-preview">Vista previa <span class="cp-preview" style="background:${value}"></span></div>
+            </div>
+        </div>
+    `;
+}
+
+function initColorPicker(id) {
+    const root = document.getElementById(id);
+    if (!root) return;
+    const native = root.querySelector('.cp-native');
+    const hex = root.querySelector('.cp-hex');
+    const preview = root.querySelector('.cp-preview');
+
+    const setColor = (color, source) => {
+        const value = normalizeHex(color);
+        if (!value) return;
+        root.dataset.color = value;
+        preview.style.background = value;
+        if (source !== 'native') native.value = value;
+        if (source !== 'hex') hex.value = value;
+        root.querySelectorAll('.color-swatch').forEach(s => {
+            s.classList.toggle('selected', s.dataset.color === value);
+        });
+    };
+
+    root.querySelector('.color-palette').onclick = (e) => {
+        const swatch = e.target.closest('.color-swatch');
+        if (swatch) setColor(swatch.dataset.color);
+    };
+    native.oninput = () => setColor(native.value, 'native');
+    hex.oninput = () => setColor(hex.value, 'hex');
+    hex.onblur = () => { hex.value = root.dataset.color; };
+}
+
+function getColorPickerValue(id, fallback = '#6366F1') {
+    return document.getElementById(id)?.dataset.color || fallback;
+}
+
+// ========================================
 // AUTH
 // ========================================
 function saveSession(token, usuario) {
@@ -2382,32 +2462,25 @@ async function renderRutas() {
 
 function openRutaModal(callback, editData = null) {
     const isEdit = !!editData;
-    const colors = ['#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#10B981', '#06B6D4', '#3B82F6', '#1E293B'];
     openModal(isEdit ? `Editar Ruta: ${editData.nombre}` : 'Nueva Ruta', `
         <div class="form-group"><label>Nombre *</label><input type="text" id="m-ruta-nombre" placeholder="Ej: Centro, Norte, Zona 1..." value="${editData?.nombre || ''}"></div>
         <div class="form-group"><label>Descripción</label><input type="text" id="m-ruta-desc" placeholder="Descripción opcional" value="${editData?.descripcion || ''}"></div>
         <div class="form-group">
             <label>Color de identificación</label>
-            <div style="display:flex;gap:8px;flex-wrap:wrap" id="m-ruta-colors">
-                ${colors.map(c => `<div data-color="${c}" style="width:36px;height:36px;border-radius:10px;background:${c};cursor:pointer;border:3px solid ${editData?.color === c ? 'var(--text)' : 'transparent'}" onclick="document.querySelectorAll('#m-ruta-colors > div').forEach(d=>d.style.borderColor='transparent');this.style.borderColor='var(--text)';this.dataset.selected='1';document.querySelectorAll('#m-ruta-colors > div').forEach(d=>{if(d!==this)d.dataset.selected=''}); "></div>`).join('')}
-            </div>
+            ${colorPickerHTML('m-ruta-colors', editData?.color || '#6366F1')}
         </div>
     `, `
         <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
         <button class="btn btn-primary" id="m-ruta-save">${isEdit ? 'Actualizar' : 'Guardar'}</button>
     `);
 
-    // Mark default
-    const defaultColor = editData?.color || '#6366F1';
-    const defaultEl = document.querySelector(`#m-ruta-colors > div[data-color="${defaultColor}"]`);
-    if (defaultEl) defaultEl.dataset.selected = '1';
+    initColorPicker('m-ruta-colors');
 
     document.getElementById('m-ruta-save').onclick = async () => {
-        const selectedEl = document.querySelector('#m-ruta-colors > div[data-selected="1"]');
         const body = {
             nombre: document.getElementById('m-ruta-nombre').value,
             descripcion: document.getElementById('m-ruta-desc').value,
-            color: selectedEl?.dataset.color || '#6366F1',
+            color: getColorPickerValue('m-ruta-colors'),
         };
         if (!body.nombre) { toast('El nombre es requerido', 'warning'); return; }
 

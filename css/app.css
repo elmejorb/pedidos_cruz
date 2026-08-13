@@ -270,6 +270,111 @@ body {
     min-height: 80px;
 }
 
+/* ========================================
+   COLOR PICKER
+   ======================================== */
+.color-picker {
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    background: var(--surface);
+}
+
+.color-palette {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 6px;
+}
+
+.color-swatch {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.color-swatch:hover {
+    transform: scale(1.12);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08), var(--shadow-md);
+}
+
+.color-swatch.selected {
+    border-color: var(--surface);
+    box-shadow: 0 0 0 2px var(--text);
+    transform: scale(1.08);
+}
+
+.color-swatch.selected::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 46%;
+    width: 5px;
+    height: 9px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: translate(-50%, -50%) rotate(45deg);
+    filter: drop-shadow(0 0 1px rgba(15, 23, 42, 0.5));
+}
+
+.color-picker-custom {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-light);
+}
+
+.color-picker-custom label {
+    margin-bottom: 0;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.color-picker-custom input[type="color"] {
+    width: 40px;
+    height: 34px;
+    padding: 2px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    background: var(--surface);
+}
+
+.color-picker-custom input[type="text"] {
+    width: 110px;
+    padding: 7px 10px;
+    font-size: 13px;
+    text-transform: uppercase;
+}
+
+.color-picker-preview {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.color-picker-preview span {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+@media (max-width: 520px) {
+    .color-palette { grid-template-columns: repeat(6, 1fr); }
+    .color-picker-preview { margin-left: 0; }
+    .color-picker-custom { flex-wrap: wrap; }
+}
+
 .login-error {
     background: var(--danger-light);
     color: var(--danger);
