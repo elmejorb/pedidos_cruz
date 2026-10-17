@@ -12,8 +12,13 @@ class Pedido extends Model
     protected $fillable = [
         'numero_pedido', 'id_cliente', 'id_vendedor', 'id_ruta', 'fecha_pedido',
         'fecha_entrega', 'estado', 'subtotal', 'descuento', 'impuesto',
-        'total', 'notas'
+        'total', 'notas', 'forma_pago', 'dias_credito'
     ];
+
+    public function pagos()
+    {
+        return $this->hasMany(Pago::class, 'id_pedido', 'id_pedido');
+    }
 
     public function cliente()
     {

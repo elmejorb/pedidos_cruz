@@ -135,7 +135,7 @@ function feCardPedido(p) {
                 ${rechazo
                     ? `<div class="fe-card-sub" style="margin:6px 0 12px">Último intento ${f.estado === 'error' ? 'con error' : 'rechazado por la DIAN'}:<br><em>${feEsc(f.mensaje_dian || '')}</em></div>`
                     : `<div class="fe-card-sub" style="margin:6px 0 12px">Convierte este pedido en factura electrónica válida ante la DIAN.</div>`}
-                <button class="btn btn-block fe-btn-main" onclick="abrirFacturarPedido(${p.id_pedido}, ${p.id_cliente})">
+                <button class="btn btn-block fe-btn-main" onclick="abrirFacturarPedido(${p.id_pedido}, ${p.id_cliente}, '${p.forma_pago || 'contado'}', ${parseInt(p.dias_credito) || 0})">
                     <i class="fas fa-paper-plane"></i> ${rechazo ? 'Corregir y reintentar' : 'Facturar electrónicamente'}
                 </button>
                 ${rechazo ? `<button class="btn btn-ghost btn-sm btn-block" style="margin-top:6px" onclick="viewFactura(${f.id_factura})"><i class="fas fa-magnifying-glass"></i> Ver detalle del rechazo</button>` : ''}
@@ -143,8 +143,9 @@ function feCardPedido(p) {
         </div>`;
 }
 
-async function abrirFacturarPedido(idPedido, idCliente) {
-    const opts = { forma_pago: 1, medio_pago: 10, dias_credito: 30, consumidor_final: false, email: '' };
+async function abrirFacturarPedido(idPedido, idCliente, formaPedido = 'contado', diasPedido = 0) {
+    const credito = formaPedido === 'credito';
+    const opts = { forma_pago: credito ? 2 : 1, medio_pago: credito ? 30 : 10, dias_credito: credito && diasPedido > 0 ? diasPedido : 30, consumidor_final: false, email: '' };
     let preview = null;
     let enviando = false;
 
@@ -270,7 +271,7 @@ async function abrirFacturarPedido(idPedido, idCliente) {
     window._feEditarCliente = async () => {
         const data = await api(`/clientes/${idCliente}`);
         if (!data || data.error) return;
-        openClientModal(() => abrirFacturarPedido(idPedido, idCliente), data.cliente);
+        openClientModal(() => abrirFacturarPedido(idPedido, idCliente, formaPedido, diasPedido), data.cliente);
     };
 
     async function enviar() {
@@ -319,7 +320,7 @@ async function abrirFacturarPedido(idPedido, idCliente) {
         document.getElementById('modal-footer').innerHTML = `
             <button class="btn btn-outline" onclick="closeModal();viewPedido(${idPedido})">Cerrar</button>
             <button class="btn btn-outline" onclick="window._feEditarCliente()"><i class="fas fa-user-pen"></i> Editar cliente</button>
-            <button class="btn btn-primary" onclick="abrirFacturarPedido(${idPedido}, ${idCliente})"><i class="fas fa-rotate"></i> Revisar y reintentar</button>`;
+            <button class="btn btn-primary" onclick="abrirFacturarPedido(${idPedido}, ${idCliente}, '${formaPedido}', ${diasPedido})"><i class="fas fa-rotate"></i> Revisar y reintentar</button>`;
     }
 
     cargarPreview();

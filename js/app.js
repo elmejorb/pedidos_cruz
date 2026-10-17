@@ -268,6 +268,7 @@ function navigateTo(page, options = {}) {
         'rutas': 'Rutas',
         'despacho': 'Generar Despacho',
         'facturas': 'Facturas Electrónicas',
+        'cartera': 'Cartera y Pagos',
         'config-fe': 'Configuración Facturación Electrónica',
     };
 
@@ -298,6 +299,7 @@ function navigateTo(page, options = {}) {
         'rutas': renderRutas,
         'despacho': renderDespacho,
         'facturas': renderFacturas,
+        'cartera': renderCartera,
         'config-fe': renderConfigFE,
     };
 
@@ -513,7 +515,7 @@ async function renderPedidos() {
                 <td>${p.ruta ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:12px;background:${p.ruta.color}22;color:${p.ruta.color};font-weight:600;font-size:11px"><i class="fas fa-route"></i>${p.ruta.nombre}</span>` : '<span style="color:var(--text-muted);font-size:12px">-</span>'}</td>
                 <td>${p.vendedor?.nombre || 'N/A'}</td>
                 <td>${formatDate(p.fecha_pedido)}</td>
-                <td><span class="badge-status badge-${p.estado}">${p.estado}</span> ${fePedidoChip(p.factura)}</td>
+                <td><span class="badge-status badge-${p.estado}">${p.estado}</span> ${crPedidoChip(p)} ${fePedidoChip(p.factura)}</td>
                 <td><strong>$${formatNumber(p.total)}</strong></td>
                 <td>
                     <button class="btn btn-ghost btn-sm" onclick="viewPedido(${p.id_pedido})" title="Ver detalle">
@@ -748,6 +750,7 @@ async function viewPedido(id, skipHash = false) {
                 ${p.notas ? `<div class="card" style="margin-bottom:20px"><div class="card-body"><strong>Notas:</strong> ${p.notas}</div></div>` : ''}
             </div>
             <div>
+                ${crCardPedido(p)}
                 ${feCardPedido(p)}
                 <div class="card" style="margin-bottom:20px">
                     <div class="card-header"><h3>Información</h3></div>
@@ -922,6 +925,8 @@ window._editarPedido = async (id) => {
                 <div class="cart-summary-row total"><span>Total</span><span id="edit-total">$${formatNumber(subtotal)}</span></div>
             </div>
 
+            <div style="margin-top:16px">${crFormaPagoHTML('ed', p.forma_pago || 'contado', p.dias_credito || 30)}</div>
+
             <div class="form-group" style="margin-top:16px;margin-bottom:8px">
                 <label>Ruta de despacho</label>
                 <select id="edit-ruta" style="padding:12px 14px;border:2px solid var(--border);border-radius:var(--radius);width:100%;font-family:var(--font);font-size:14px">
@@ -938,6 +943,7 @@ window._editarPedido = async (id) => {
         `);
 
         renderEditCart();
+        crInitFormaPago('ed', null, p.fecha_pedido);
 
         // Cargar rutas en el select de edición
         api('/rutas').then(rd => {
@@ -990,6 +996,7 @@ window._editarPedido = async (id) => {
                 })),
                 notas: document.getElementById('edit-notas').value || null,
                 id_ruta: document.getElementById('edit-ruta')?.value || null,
+                ...crFormaPagoValue('ed'),
             };
 
             const resp = await api(`/pedidos/${id}`, { method: 'PUT', body: JSON.stringify(body) });
@@ -1605,10 +1612,11 @@ async function renderNuevoPedido(forceNew = false) {
                                 <label>Fecha de entrega (opcional)</label>
                                 <input type="date" id="fecha-entrega" style="padding-left:14px">
                             </div>
-                            <div class="form-group" style="margin-bottom:0">
+                            <div class="form-group">
                                 <label>Notas</label>
                                 <textarea id="pedido-notas" placeholder="Observaciones del pedido..." style="padding-left:14px"></textarea>
                             </div>
+                            ${crFormaPagoHTML('wz', state.formaPago?.forma_pago || 'contado', state.formaPago?.dias_credito || 30)}
                         </div>
                     </div>
 
@@ -1642,6 +1650,7 @@ async function renderNuevoPedido(forceNew = false) {
         `;
 
         window._backStep2 = () => { wizardStep = 2; renderWizard(); };
+        crInitFormaPago('wz', v => { state.formaPago = v; });
 
         // Cargar rutas
         api('/rutas').then(rd => {
@@ -1678,6 +1687,7 @@ async function renderNuevoPedido(forceNew = false) {
                 fecha_entrega: document.getElementById('fecha-entrega').value || null,
                 id_ruta: idRuta,
                 notas: document.getElementById('pedido-notas').value || null,
+                ...crFormaPagoValue('wz'),
             };
 
             const data = await api('/pedidos', {
@@ -1688,6 +1698,7 @@ async function renderNuevoPedido(forceNew = false) {
             if (data && !data.error) {
                 toast('Pedido creado exitosamente!');
                 clearCartState();
+                state.formaPago = null;
                 viewPedido(data.pedido.id_pedido);
             } else {
                 toast(data?.mensaje || 'Error al crear pedido', 'error');
@@ -3431,7 +3442,7 @@ function handleHashRoute() {
         return true;
     }
 
-    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho', 'facturas', 'config-fe'];
+    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho', 'facturas', 'config-fe', 'cartera'];
     if (validPages.includes(page)) {
         navigateTo(page, { skipHash: true });
         return true;

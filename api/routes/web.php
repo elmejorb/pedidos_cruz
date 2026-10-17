@@ -71,6 +71,13 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     // Reportes
     $router->get('/reportes/ventas', 'PedidoController@reporteVentas');
 
+    // Créditos y pagos
+    $router->get('/cartera', 'PagoController@cartera');
+    $router->get('/pagos', 'PagoController@index');
+    $router->get('/pagos/{id}', 'PagoController@show');
+    $router->post('/pagos', 'PagoController@store');
+    $router->put('/pagos/{id}/anular', 'PagoController@anular');
+
     // Facturación electrónica DIAN
     $router->get('/pedidos/{id}/factura/preview', 'FacturaController@preview');
     $router->post('/pedidos/{id}/facturar', 'FacturaController@facturar');

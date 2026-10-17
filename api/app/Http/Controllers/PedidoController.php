@@ -14,6 +14,42 @@ use Carbon\Carbon;
 class PedidoController extends Controller
 {
     private static $feHabilitada = null;
+    private static $creditosHabilitados = null;
+
+    private function creditosHabilitados(): bool
+    {
+        if (self::$creditosHabilitados === null) self::$creditosHabilitados = Schema::hasTable('pc_pagos');
+        return self::$creditosHabilitados;
+    }
+
+    private function pagadoDe($idPedido): float
+    {
+        if (!$this->creditosHabilitados()) return 0.0;
+        return (float) DB::table('pc_pagos')->where('id_pedido', $idPedido)->where('anulado', 0)->sum('valor');
+    }
+
+    /** Forma de pago enviada por el frontend (solo si la columna ya existe) */
+    private function datosCredito(Request $request): array
+    {
+        if (!$request->has('forma_pago')) return [];
+        $credito = $request->forma_pago === 'credito';
+        return $this->soloColumnasExistentes('pc_pedidos', [
+            'forma_pago' => $credito ? 'credito' : 'contado',
+            'dias_credito' => $credito ? max(0, (int) $request->dias_credito) : 0,
+        ]);
+    }
+
+    private function bloqueoPorPagos($idPedido, string $accion)
+    {
+        $pagado = $this->pagadoDe($idPedido);
+        if ($pagado > 0) {
+            return response()->json([
+                'error' => true,
+                'mensaje' => "El pedido tiene pagos registrados ($" . number_format($pagado, 0, ',', '.') . "). Anúlalos antes de {$accion}."
+            ], 409);
+        }
+        return null;
+    }
 
     private function feHabilitada(): bool
     {
@@ -65,6 +101,10 @@ class PedidoController extends Controller
             $query->where('id_ruta', $request->id_ruta);
         }
 
+        if ($request->forma_pago && $this->creditosHabilitados()) {
+            $query->where('forma_pago', $request->forma_pago);
+        }
+
         if ($request->has('fecha_desde') && $request->fecha_desde) {
             $query->whereDate('fecha_pedido', '>=', $request->fecha_desde);
         }
@@ -94,6 +134,19 @@ class PedidoController extends Controller
             $pedidos->each(fn($p) => $p->setAttribute('factura', $facturas[$p->id_pedido] ?? null));
         }
 
+        if ($this->creditosHabilitados() && $pedidos->isNotEmpty()) {
+            $pagados = DB::table('pc_pagos')->where('anulado', 0)
+                ->whereIn('id_pedido', $pedidos->where('forma_pago', 'credito')->pluck('id_pedido'))
+                ->groupBy('id_pedido')->select('id_pedido', DB::raw('SUM(valor) as pagado'))
+                ->pluck('pagado', 'id_pedido');
+            $pedidos->each(function ($p) use ($pagados) {
+                if ($p->forma_pago !== 'credito') return;
+                $pagado = (float) ($pagados[$p->id_pedido] ?? 0);
+                $p->setAttribute('pagado', $pagado);
+                $p->setAttribute('saldo', round((float) $p->total - $pagado, 2));
+            });
+        }
+
         return response()->json(['error' => false, 'pedidos' => $pedidos]);
     }
 
@@ -112,6 +165,18 @@ class PedidoController extends Controller
         }
 
         $pedido->setAttribute('factura', $this->facturaDe($pedido->id_pedido));
+
+        if ($this->creditosHabilitados()) {
+            $pagos = DB::table('pc_pagos as pa')
+                ->leftJoin('pc_usuarios as u', 'u.id_usuario', '=', 'pa.id_usuario')
+                ->where('pa.id_pedido', $pedido->id_pedido)
+                ->select('pa.*', 'u.nombre as usuario_nombre')
+                ->orderBy('pa.fecha')->orderBy('pa.id_pago')->get();
+            $pagado = (float) $pagos->where('anulado', 0)->sum('valor');
+            $pedido->setAttribute('pagos', $pagos);
+            $pedido->setAttribute('pagado', $pagado);
+            $pedido->setAttribute('saldo', round((float) $pedido->total - $pagado, 2));
+        }
 
         return response()->json(['error' => false, 'pedido' => $pedido]);
     }
@@ -194,6 +259,10 @@ class PedidoController extends Controller
                 PedidoDetalle::create($itemData);
             }
 
+            if ($credito = $this->datosCredito($request)) {
+                $pedido->fill($credito)->save();
+            }
+
             // History entry
             PedidoHistorial::create([
                 'id_pedido' => $pedido->id_pedido,
@@ -233,6 +302,7 @@ class PedidoController extends Controller
         }
 
         if ($request->estado === 'cancelado' && ($b = $this->bloqueoPorFactura($id))) return $b;
+        if ($request->estado === 'cancelado' && $pedido->estado !== 'cancelado' && ($b = $this->bloqueoPorPagos($id, 'cancelar el pedido'))) return $b;
 
         $estadoAnterior = $pedido->estado;
         $pedido->estado = $request->estado;
@@ -343,6 +413,17 @@ class PedidoController extends Controller
             if ($request->has('id_ruta')) $pedido->id_ruta = $request->id_ruta ?: null;
             if ($request->has('fecha_entrega')) $pedido->fecha_entrega = $request->fecha_entrega;
             if ($request->has('notas')) $pedido->notas = $request->notas;
+            $pedido->fill($this->datosCredito($request));
+
+            $pagado = $this->pagadoDe($id);
+            if ($pagado > 0 && ($pedido->forma_pago ?? 'contado') !== 'credito') {
+                DB::rollBack();
+                return response()->json(['error' => true, 'mensaje' => 'El pedido tiene pagos registrados; no se puede cambiar a contado. Anula los pagos primero.'], 422);
+            }
+            if ($pagado > 0 && $pedido->total + 0.009 < $pagado) {
+                DB::rollBack();
+                return response()->json(['error' => true, 'mensaje' => 'El nuevo total ($' . number_format($pedido->total, 0, ',', '.') . ') es menor que lo ya pagado ($' . number_format($pagado, 0, ',', '.') . ').'], 422);
+            }
             $pedido->save();
 
             // History entry
@@ -376,6 +457,7 @@ class PedidoController extends Controller
         }
 
         if ($b = $this->bloqueoPorFactura($id)) return $b;
+        if ($b = $this->bloqueoPorPagos($id, 'eliminar el pedido')) return $b;
 
         // Restore stock (equivalent units)
         $detalles = PedidoDetalle::where('id_pedido', $id)->get();
