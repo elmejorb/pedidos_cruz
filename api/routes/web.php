@@ -70,6 +70,7 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
 
     // Reportes
     $router->get('/reportes/ventas', 'PedidoController@reporteVentas');
+    $router->get('/reportes/cierre', 'ReporteController@cierre');
 
     // Créditos y pagos
     $router->get('/cartera', 'PagoController@cartera');

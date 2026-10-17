@@ -2202,8 +2202,8 @@ function openProductModal(callback, editData = null, categorias = []) {
 // ========================================
 // REPORTES
 // ========================================
-async function renderReportes() {
-    const container = document.getElementById('page-container');
+// Pestaña "General" de Reportes (renderReportes está en cierre.js)
+async function renderReportesGeneral(container = document.getElementById('page-container')) {
     container.innerHTML = '<div style="text-align:center;padding:40px"><div class="loading-spinner" style="border-color:var(--border);border-top-color:var(--primary);margin:0 auto"></div></div>';
 
     const data = await api('/reportes/ventas');
