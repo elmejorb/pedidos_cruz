@@ -89,6 +89,7 @@ function openModal(title, bodyHTML, footerHTML = '') {
     document.getElementById('modal-title').textContent = title;
     document.getElementById('modal-body').innerHTML = bodyHTML;
     document.getElementById('modal-footer').innerHTML = footerHTML;
+    document.getElementById('modal-container').classList.remove('modal-wide');
     document.getElementById('modal-overlay').classList.add('show');
 }
 
@@ -266,12 +267,14 @@ function navigateTo(page, options = {}) {
         'perfil': 'Mi Perfil',
         'rutas': 'Rutas',
         'despacho': 'Generar Despacho',
+        'facturas': 'Facturas Electrónicas',
+        'config-fe': 'Configuración Facturación Electrónica',
     };
 
     document.getElementById('header-title').textContent = titles[page] || 'Pedidos Cruz';
 
     // Block admin-only pages for vendedores
-    const adminPages = ['usuarios', 'categorias', 'productos', 'reportes', 'dashboard', 'rutas', 'despacho'];
+    const adminPages = ['usuarios', 'categorias', 'productos', 'reportes', 'dashboard', 'rutas', 'despacho', 'facturas', 'config-fe'];
     if (adminPages.includes(page) && state.usuario?.rol !== 'admin') {
         const container = document.getElementById('page-container');
         container.innerHTML = '<div class="empty-state"><i class="fas fa-lock"></i><h3>Acceso restringido</h3><p>No tienes permisos para acceder a esta sección</p></div>';
@@ -294,6 +297,8 @@ function navigateTo(page, options = {}) {
         'perfil': renderPerfil,
         'rutas': renderRutas,
         'despacho': renderDespacho,
+        'facturas': renderFacturas,
+        'config-fe': renderConfigFE,
     };
 
     if (routes[page]) routes[page]();
@@ -508,7 +513,7 @@ async function renderPedidos() {
                 <td>${p.ruta ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:12px;background:${p.ruta.color}22;color:${p.ruta.color};font-weight:600;font-size:11px"><i class="fas fa-route"></i>${p.ruta.nombre}</span>` : '<span style="color:var(--text-muted);font-size:12px">-</span>'}</td>
                 <td>${p.vendedor?.nombre || 'N/A'}</td>
                 <td>${formatDate(p.fecha_pedido)}</td>
-                <td><span class="badge-status badge-${p.estado}">${p.estado}</span></td>
+                <td><span class="badge-status badge-${p.estado}">${p.estado}</span> ${fePedidoChip(p.factura)}</td>
                 <td><strong>$${formatNumber(p.total)}</strong></td>
                 <td>
                     <button class="btn btn-ghost btn-sm" onclick="viewPedido(${p.id_pedido})" title="Ver detalle">
@@ -672,6 +677,7 @@ async function viewPedido(id, skipHash = false) {
     if (!data || data.error) return;
 
     const p = data.pedido;
+    const facturado = p.factura?.estado === 'autorizada';
     state.currentPage = 'detalle-pedido';
     if (!skipHash) {
         const newHash = '#/pedidos/' + id;
@@ -684,7 +690,9 @@ async function viewPedido(id, skipHash = false) {
         <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-ghost" onclick="navigateTo('pedidos')"><i class="fas fa-arrow-left"></i> Volver a Pedidos</button>
             <div style="flex:1"></div>
-            <button class="btn btn-outline btn-sm" onclick="window._editarPedido(${p.id_pedido})"><i class="fas fa-edit"></i> Editar Pedido</button>
+            ${facturado
+                ? `<span class="fe-chip ok" style="align-self:center;padding:7px 12px"><i class="fas fa-lock"></i> Facturado ${p.factura.prefijo || ''}${p.factura.numero || ''}</span>`
+                : `<button class="btn btn-outline btn-sm" onclick="window._editarPedido(${p.id_pedido})"><i class="fas fa-edit"></i> Editar Pedido</button>`}
             <div style="position:relative;display:inline-block" id="print-dropdown">
                 <button class="btn btn-outline btn-sm" onclick="document.getElementById('print-menu').classList.toggle('show')"><i class="fas fa-print"></i> Imprimir <i class="fas fa-caret-down" style="margin-left:4px"></i></button>
                 <div id="print-menu" class="dropdown-menu">
@@ -740,6 +748,7 @@ async function viewPedido(id, skipHash = false) {
                 ${p.notas ? `<div class="card" style="margin-bottom:20px"><div class="card-body"><strong>Notas:</strong> ${p.notas}</div></div>` : ''}
             </div>
             <div>
+                ${feCardPedido(p)}
                 <div class="card" style="margin-bottom:20px">
                     <div class="card-header"><h3>Información</h3></div>
                     <div class="card-body">
@@ -1807,10 +1816,13 @@ function openClientModal(callback, editData = null) {
             </select>
         </div>
         <div class="form-group"><label>Notas</label><textarea id="m-cli-notas" style="padding-left:14px">${editData?.notas || ''}</textarea></div>
+        ${feClienteFieldsHTML(editData)}
     `, `
         <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
         <button class="btn btn-primary" id="m-cli-save">${isEdit ? 'Actualizar' : 'Guardar'}</button>
     `);
+
+    feInitClienteFields(editData);
 
     // Cargar rutas en el select
     api('/rutas').then(rd => {
@@ -1837,6 +1849,7 @@ function openClientModal(callback, editData = null) {
             direccion: document.getElementById('m-cli-dir').value,
             id_ruta: document.getElementById('m-cli-ruta').value || null,
             notas: document.getElementById('m-cli-notas').value,
+            ...feClienteFieldsValues(),
         };
 
         if (!body.nombre) { toast('El nombre es requerido', 'warning'); return; }
@@ -2140,6 +2153,7 @@ function openProductModal(callback, editData = null, categorias = []) {
                 <input type="number" id="m-prod-upc" min="1" value="${editData?.unidades_por_caja ?? 1}" title="Cuántas unidades contiene una caja. Usar 1 si no se vende por caja.">
             </div>
         </div>
+        ${feProductoFieldsHTML(editData)}
     `, `
         <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
         <button class="btn btn-primary" id="m-prod-save">${isEdit ? 'Actualizar' : 'Guardar'}</button>
@@ -2155,6 +2169,7 @@ function openProductModal(callback, editData = null, categorias = []) {
             stock: parseInt(document.getElementById('m-prod-stock').value) || 0,
             stock_minimo: parseInt(document.getElementById('m-prod-stockmin').value) || 5,
             unidades_por_caja: parseInt(document.getElementById('m-prod-upc').value) || 1,
+            ...feProductoFieldsValues(),
         };
 
         if (!body.nombre || !body.precio) { toast('Nombre y precio son requeridos', 'warning'); return; }
@@ -3410,7 +3425,13 @@ function handleHashRoute() {
         return true;
     }
 
-    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho'];
+    // Detail factura: #/facturas/123
+    if (page === 'facturas' && parts[1] && /^\d+$/.test(parts[1])) {
+        viewFactura(parseInt(parts[1]), true);
+        return true;
+    }
+
+    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho', 'facturas', 'config-fe'];
     if (validPages.includes(page)) {
         navigateTo(page, { skipHash: true });
         return true;

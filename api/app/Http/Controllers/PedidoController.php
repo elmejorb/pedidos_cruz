@@ -8,10 +8,42 @@ use App\Models\PedidoDetalle;
 use App\Models\PedidoHistorial;
 use App\Models\Producto;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 
 class PedidoController extends Controller
 {
+    private static $feHabilitada = null;
+
+    private function feHabilitada(): bool
+    {
+        if (self::$feHabilitada === null) self::$feHabilitada = Schema::hasTable('pc_facturas');
+        return self::$feHabilitada;
+    }
+
+    /** Factura vigente del pedido (autorizada o último intento) */
+    private function facturaDe($idPedido)
+    {
+        if (!$this->feHabilitada()) return null;
+        return DB::table('pc_facturas')
+            ->where('id_pedido', $idPedido)
+            ->select('id_factura', 'estado', 'prefijo', 'numero', 'cufe', 'mensaje_dian', 'total', 'created_at')
+            ->orderByRaw("estado = 'autorizada' DESC")->orderByDesc('id_factura')
+            ->first();
+    }
+
+    private function bloqueoPorFactura($idPedido)
+    {
+        $f = $this->facturaDe($idPedido);
+        if ($f && $f->estado === 'autorizada') {
+            return response()->json([
+                'error' => true,
+                'mensaje' => "El pedido ya tiene factura electrónica {$f->prefijo}{$f->numero}. No se puede modificar; se corrige con Nota Crédito."
+            ], 409);
+        }
+        return null;
+    }
+
     public function index(Request $request)
     {
         $query = Pedido::with([
@@ -53,6 +85,15 @@ class PedidoController extends Controller
 
         $pedidos = $query->orderBy('created_at', 'desc')->get();
 
+        if ($this->feHabilitada() && $pedidos->isNotEmpty()) {
+            $facturas = DB::table('pc_facturas')
+                ->whereIn('id_pedido', $pedidos->pluck('id_pedido'))
+                ->select('id_pedido', 'id_factura', 'estado', 'prefijo', 'numero')
+                ->orderByRaw("estado = 'autorizada'")->orderBy('id_factura')
+                ->get()->keyBy('id_pedido'); // la última clave gana: autorizada > último intento
+            $pedidos->each(fn($p) => $p->setAttribute('factura', $facturas[$p->id_pedido] ?? null));
+        }
+
         return response()->json(['error' => false, 'pedidos' => $pedidos]);
     }
 
@@ -69,6 +110,8 @@ class PedidoController extends Controller
         if (!$pedido) {
             return response()->json(['error' => true, 'mensaje' => 'Pedido no encontrado'], 404);
         }
+
+        $pedido->setAttribute('factura', $this->facturaDe($pedido->id_pedido));
 
         return response()->json(['error' => false, 'pedido' => $pedido]);
     }
@@ -189,6 +232,8 @@ class PedidoController extends Controller
             return response()->json(['error' => true, 'mensaje' => 'Pedido no encontrado'], 404);
         }
 
+        if ($request->estado === 'cancelado' && ($b = $this->bloqueoPorFactura($id))) return $b;
+
         $estadoAnterior = $pedido->estado;
         $pedido->estado = $request->estado;
         $pedido->save();
@@ -233,6 +278,8 @@ class PedidoController extends Controller
         if (!$pedido) {
             return response()->json(['error' => true, 'mensaje' => 'Pedido no encontrado'], 404);
         }
+
+        if ($b = $this->bloqueoPorFactura($id)) return $b;
 
         $usuario = $request->usuario;
 
@@ -327,6 +374,8 @@ class PedidoController extends Controller
         if (!$pedido) {
             return response()->json(['error' => true, 'mensaje' => 'Pedido no encontrado'], 404);
         }
+
+        if ($b = $this->bloqueoPorFactura($id)) return $b;
 
         // Restore stock (equivalent units)
         $detalles = PedidoDetalle::where('id_pedido', $id)->get();

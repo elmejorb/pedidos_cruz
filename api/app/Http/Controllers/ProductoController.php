@@ -62,6 +62,9 @@ class ProductoController extends Controller
             'activo' => 1,
         ]);
 
+        $fiscal = $this->soloColumnasExistentes('pc_productos', $request->only(['iva', 'unit_measure_id']));
+        if ($fiscal) $producto->fill($fiscal)->save();
+
         return response()->json([
             'error' => false,
             'mensaje' => 'Producto creado',
@@ -83,6 +86,7 @@ class ProductoController extends Controller
             'codigo', 'nombre', 'descripcion', 'id_categoria',
             'precio', 'stock', 'stock_minimo', 'unidades_por_caja'
         ]));
+        $producto->fill($this->soloColumnasExistentes('pc_productos', $request->only(['iva', 'unit_measure_id'])));
         $producto->save();
 
         return response()->json([

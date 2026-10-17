@@ -70,4 +70,18 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
 
     // Reportes
     $router->get('/reportes/ventas', 'PedidoController@reporteVentas');
+
+    // Facturación electrónica DIAN
+    $router->get('/pedidos/{id}/factura/preview', 'FacturaController@preview');
+    $router->post('/pedidos/{id}/facturar', 'FacturaController@facturar');
+    $router->get('/facturas', 'FacturaController@index');
+    $router->get('/facturas/{id}', 'FacturaController@show');
+    $router->get('/facturas/{id}/trazas', 'FacturaController@trazas');
+    $router->post('/facturas/{id}/reenviar', 'FacturaController@reenviar');
+    $router->post('/facturas/{id}/email', 'FacturaController@email');
+    $router->delete('/facturas/{id}', 'FacturaController@destroy');
+    $router->get('/config-fe', 'FacturaController@config');
+    $router->put('/config-fe', 'FacturaController@guardarConfig');
+    $router->post('/config-fe/probar', 'FacturaController@probarConexion');
+    $router->get('/dian/municipios', 'FacturaController@municipios');
 });

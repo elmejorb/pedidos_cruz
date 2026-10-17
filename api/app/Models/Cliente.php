@@ -11,7 +11,8 @@ class Cliente extends Model
 
     protected $fillable = [
         'nombre', 'razon_social', 'nit_cedula', 'email', 'telefono',
-        'direccion', 'ciudad', 'id_ruta', 'notas', 'id_vendedor', 'activo'
+        'direccion', 'ciudad', 'id_ruta', 'notas', 'id_vendedor', 'activo',
+        'tipo_documento', 'tipo_organizacion', 'id_responsabilidad', 'id_municipio'
     ];
 
     public function vendedor()

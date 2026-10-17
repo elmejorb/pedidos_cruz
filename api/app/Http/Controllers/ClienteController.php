@@ -66,6 +66,9 @@ class ClienteController extends Controller
             'activo' => 1,
         ]);
 
+        $fiscal = $this->soloColumnasExistentes('pc_clientes', $this->datosFiscales($request));
+        if ($fiscal) $cliente->fill($fiscal)->save();
+
         return response()->json([
             'error' => false,
             'mensaje' => 'Cliente creado',
@@ -85,6 +88,7 @@ class ClienteController extends Controller
             'direccion', 'ciudad', 'notas'
         ]));
         if ($request->has('id_ruta')) $cliente->id_ruta = $request->id_ruta ?: null;
+        $cliente->fill($this->soloColumnasExistentes('pc_clientes', $this->datosFiscales($request)));
         $cliente->save();
 
         return response()->json([
@@ -105,5 +109,20 @@ class ClienteController extends Controller
         $cliente->save();
 
         return response()->json(['error' => false, 'mensaje' => 'Cliente eliminado']);
+    }
+
+    /** Campos fiscales para facturación electrónica (solo los enviados) */
+    private function datosFiscales(Request $request): array
+    {
+        $datos = [];
+        if ($request->has('tipo_documento')) {
+            $datos['tipo_documento'] = in_array($request->tipo_documento, ['13', '31', '22', '41', '42']) ? $request->tipo_documento : '13';
+        }
+        if ($request->has('tipo_organizacion')) $datos['tipo_organizacion'] = (int) $request->tipo_organizacion === 1 ? 1 : 2;
+        if ($request->has('id_responsabilidad')) {
+            $datos['id_responsabilidad'] = in_array((int) $request->id_responsabilidad, [1, 2, 3, 4]) ? (int) $request->id_responsabilidad : 4;
+        }
+        if ($request->has('id_municipio')) $datos['id_municipio'] = $request->id_municipio ?: null;
+        return $datos;
     }
 }
