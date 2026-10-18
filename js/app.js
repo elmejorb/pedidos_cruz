@@ -468,6 +468,7 @@ async function renderPedidos() {
             </div>
             <button class="btn btn-outline btn-sm" onclick="window._printListaPedidos()" title="Imprimir listado"><i class="fas fa-print"></i> Imprimir</button>
         </div>
+        <div id="off-pendientes" data-tipo="pedido"></div>
         <div id="filter-summary" style="margin-bottom:12px;font-size:13px;color:var(--text-secondary);font-weight:500"></div>
         <div class="card">
             <div class="table-wrapper">
@@ -497,6 +498,7 @@ async function renderPedidos() {
         if (!data) return;
         allPedidos = data.pedidos || [];
         renderPedidosTable(allPedidos);
+        if (typeof offPintarPendientes === 'function') offPintarPendientes();
     }
 
     function renderPedidosTable(pedidos) {
@@ -1693,7 +1695,21 @@ async function renderNuevoPedido(forceNew = false) {
             const data = await api('/pedidos', {
                 method: 'POST',
                 body: JSON.stringify(body),
+                offResumen: {
+                    cliente: state.selectedClient.razon_social || state.selectedClient.nombre,
+                    total: state.cart.reduce((s, i) => s + i.precio_unitario * i.cantidad, 0),
+                    items: state.cart.length,
+                    forma_pago: body.forma_pago || 'contado',
+                },
             });
+
+            if (data && data.offline) {
+                toast(data.mensaje, 'warning', 6000);
+                clearCartState();
+                state.formaPago = null;
+                navigateTo('pedidos');
+                return;
+            }
 
             if (data && !data.error) {
                 toast('Pedido creado exitosamente!');

@@ -1,0 +1,17 @@
+{
+    "name": "Pedidos Cruz",
+    "short_name": "Pedidos",
+    "description": "Toma de pedidos y cobros para vendedores, funciona sin conexión",
+    "start_url": "./",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#F1F5F9",
+    "theme_color": "#6366F1",
+    "lang": "es-CO",
+    "icons": [
+        { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png" },
+        { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png" },
+        { "src": "img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    ]
+}

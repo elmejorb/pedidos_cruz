@@ -161,9 +161,17 @@ class PagoController extends Controller
         ]);
 
         $usuario = $request->usuario;
+        $uuid = $this->uuidOffline($request, 'pc_pagos');
+        if ($uuid && ($dup = Pago::where('uuid_offline', $uuid)->first())) {
+            return response()->json([
+                'error' => false, 'duplicado' => true, 'mensaje' => 'El pago ya estaba sincronizado',
+                'pago' => $dup->load(['pedido:id_pedido,numero_pedido,total', 'cliente:id_cliente,nombre,razon_social', 'usuario:id_usuario,nombre']),
+                'saldo' => round((float) $dup->pedido->total - Pago::pagadoDe($dup->id_pedido), 2),
+            ]);
+        }
 
         try {
-            $resultado = DB::transaction(function () use ($request, $usuario) {
+            $resultado = DB::transaction(function () use ($request, $usuario, $uuid) {
                 // Bloqueo del pedido: evita dos abonos simultáneos que sobrepasen el saldo
                 $pedido = Pedido::where('id_pedido', $request->id_pedido)->lockForUpdate()->first();
 
@@ -195,6 +203,10 @@ class PagoController extends Controller
                     'notas' => $request->notas,
                     'id_usuario' => $usuario->id_usuario,
                 ]);
+                if ($uuid) {
+                    $pago->uuid_offline = $uuid;
+                    $pago->save();
+                }
 
                 return ['pago' => $pago, 'saldo' => round($saldo - $valor, 2)];
             });

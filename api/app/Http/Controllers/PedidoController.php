@@ -181,8 +181,24 @@ class PedidoController extends Controller
         return response()->json(['error' => false, 'pedido' => $pedido]);
     }
 
+    private function pedidoPorUuid(?string $uuid)
+    {
+        if (!$uuid) return null;
+        $pedido = Pedido::where('uuid_offline', $uuid)->first();
+        return $pedido ? response()->json([
+            'error' => false,
+            'duplicado' => true,
+            'mensaje' => 'El pedido ya estaba sincronizado',
+            'pedido' => $pedido->load(['cliente', 'detalles.producto', 'vendedor:id_usuario,nombre']),
+        ]) : null;
+    }
+
     public function store(Request $request)
     {
+        $uuid = $this->uuidOffline($request, 'pc_pedidos');
+        if ($r = $this->pedidoPorUuid($uuid)) return $r;
+        $fechaOffline = $uuid ? $this->fechaOffline($request) : null;
+
         $this->validate($request, [
             'id_cliente' => 'required|integer|exists:pc_clientes,id_cliente',
             'id_ruta' => 'required|integer|exists:pc_rutas,id_ruta',
@@ -244,7 +260,7 @@ class PedidoController extends Controller
                 'id_cliente' => $request->id_cliente,
                 'id_vendedor' => $usuario->id_usuario,
                 'id_ruta' => $request->id_ruta ?: null,
-                'fecha_pedido' => Carbon::now(),
+                'fecha_pedido' => $fechaOffline ?: Carbon::now(),
                 'fecha_entrega' => $request->fecha_entrega,
                 'estado' => 'pendiente',
                 'subtotal' => $subtotal,
@@ -262,6 +278,10 @@ class PedidoController extends Controller
             if ($credito = $this->datosCredito($request)) {
                 $pedido->fill($credito)->save();
             }
+            if ($uuid) {
+                $pedido->uuid_offline = $uuid;
+                $pedido->save();
+            }
 
             // History entry
             PedidoHistorial::create([
@@ -269,7 +289,7 @@ class PedidoController extends Controller
                 'estado_anterior' => null,
                 'estado_nuevo' => 'pendiente',
                 'id_usuario' => $usuario->id_usuario,
-                'comentario' => 'Pedido creado',
+                'comentario' => $uuid ? 'Pedido creado sin conexión (sincronizado ' . Carbon::now()->format('d/m H:i') . ')' : 'Pedido creado',
                 'fecha' => Carbon::now(),
             ]);
 
@@ -283,6 +303,8 @@ class PedidoController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            // Dos envíos simultáneos del mismo pedido offline: el índice único frena el segundo
+            if ($r = $this->pedidoPorUuid($uuid)) return $r;
             return response()->json([
                 'error' => true,
                 'mensaje' => 'Error al crear pedido: ' . $e->getMessage()

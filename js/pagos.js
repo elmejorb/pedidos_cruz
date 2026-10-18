@@ -188,15 +188,16 @@ async function crAbrirPago(idPedido, onDone = null) {
     const data = await api(`/pedidos/${idPedido}`);
     if (!data || data.error) return;
     const p = data.pedido;
-    const saldo = parseFloat(p.saldo || 0);
-    if (saldo <= 0) { toast('Este crédito ya está pagado', 'warning'); return; }
+    const pendienteOff = typeof offAbonosPendientes === 'function' ? offAbonosPendientes(idPedido) : 0;
+    const saldo = Math.max(0, parseFloat(p.saldo || 0) - pendienteOff);
+    if (saldo <= 0) { toast(pendienteOff ? 'Este crédito queda saldado con los abonos pendientes de sincronizar' : 'Este crédito ya está pagado', 'warning'); return; }
 
     const cliente = p.cliente?.razon_social || p.cliente?.nombre || '';
     openModal('Registrar pago', `
         <div class="cr-pago-head">
             <div>
                 <div class="cr-pago-head-cli">${crEsc(cliente)}</div>
-                <div class="cr-pago-head-sub">Pedido ${crEsc(p.numero_pedido)} · Total ${crMoney(p.total)} · Pagado ${crMoney(p.pagado)}</div>
+                <div class="cr-pago-head-sub">Pedido ${crEsc(p.numero_pedido)} · Total ${crMoney(p.total)} · Pagado ${crMoney(p.pagado)}${pendienteOff ? ` · <b>${crMoney(pendienteOff)} sin sincronizar</b>` : ''}</div>
             </div>
             <div style="text-align:right">
                 <div class="cr-pago-head-sub">SALDO</div>
@@ -265,7 +266,23 @@ async function crAbrirPago(idPedido, onDone = null) {
                 referencia: document.getElementById('cr-ref').value.trim() || null,
                 notas: document.getElementById('cr-notas').value.trim() || null,
             }),
+            offResumen: { numero_pedido: p.numero_pedido, cliente },
         });
+
+        if (r && r.offline) {
+            toast(r.mensaje, 'warning', 6000);
+            document.getElementById('modal-body').innerHTML = `
+                <div class="cr-ok">
+                    <div class="cr-ok-icon" style="background:var(--gradient-warm)"><i class="fas fa-cloud-arrow-up"></i></div>
+                    <h3>Abono guardado sin conexión</h3>
+                    <div class="cr-ok-valor" style="color:#B45309">${crMoney(valor)}</div>
+                    <p>${crEsc(cliente)} · ${crMedio(medio)[1]}</p>
+                    <p class="cr-ok-saldo">Quedó como <strong>${crEsc(r.temporal)}</strong>. Se enviará solo cuando vuelva la señal.<br>Saldo estimado: <strong>${crMoney(Math.max(0, saldo - valor))}</strong></p>
+                </div>`;
+            document.getElementById('modal-footer').innerHTML = `<button class="btn btn-primary" id="cr-cerrar">Listo</button>`;
+            document.getElementById('cr-cerrar').onclick = () => { closeModal(); onDone ? onDone() : viewPedido(idPedido); };
+            return;
+        }
 
         if (r && !r.error) {
             toast(r.mensaje || 'Pago registrado');
@@ -357,6 +374,7 @@ async function renderCartera() {
     const yearNow = new Date().getFullYear();
     container.innerHTML = `
         <div class="stats-grid fade-in" id="cr-stats"></div>
+        <div id="off-pendientes" data-tipo="pago"></div>
         <div class="cr-tabs">
             <button class="cr-tab active" data-tab="cartera"><i class="fas fa-hand-holding-dollar"></i> Cartera</button>
             <button class="cr-tab" data-tab="pagos"><i class="fas fa-clock-rotate-left"></i> Pagos recibidos</button>
@@ -417,6 +435,7 @@ async function renderCartera() {
             lista = d.creditos || [];
             pintarStats(d.resumen);
             pintar();
+            if (typeof offPintarPendientes === 'function') offPintarPendientes();
         }
 
         function filtrados() {
