@@ -1910,6 +1910,14 @@ function openClientModal(callback, editData = null) {
 // ========================================
 // PRODUCTOS
 // ========================================
+/** Etiqueta de IVA del producto (IVA incluido en el precio) */
+function ivaBadge(p, extra = '') {
+    const iva = parseFloat(p.iva || 0);
+    return iva > 0
+        ? `<span class="iva-badge iva-${iva === 19 ? '19' : '5'} ${extra}" title="IVA incluido en el precio">IVA ${formatNumber(iva)}%</span>`
+        : `<span class="iva-badge iva-0 ${extra}" title="Producto sin IVA (excluido/exento)">Sin IVA</span>`;
+}
+
 async function renderProductos() {
     const actionBtn = document.getElementById('header-action-btn');
     actionBtn.style.display = '';
@@ -1928,6 +1936,10 @@ async function renderProductos() {
             </div>
             <select class="filter-select" id="filter-categoria">
                 <option value="">Todas las categorías</option>
+            </select>
+            <select class="filter-select" id="filter-iva">
+                ${[['', 'Todos (IVA)'], ['con', 'Con IVA'], ['19', 'IVA 19%'], ['5', 'IVA 5%'], ['0', 'Sin IVA (0%)']]
+                    .map(([v, l]) => `<option value="${v}" ${(localStorage.getItem('pc_prod_iva') || '') === v ? 'selected' : ''}>${l}</option>`).join('')}
             </select>
             <select class="filter-select" id="sort-productos">
                 <option value="nombre" ${sortMode === 'nombre' ? 'selected' : ''}>A-Z Alfabético</option>
@@ -1970,6 +1982,9 @@ async function renderProductos() {
         let filtered = allProductos;
         if (term) filtered = filtered.filter(p => p.nombre.toLowerCase().includes(term) || (p.codigo || '').toLowerCase().includes(term));
         if (catFilter) filtered = filtered.filter(p => p.id_categoria == catFilter);
+        const ivaFilter = document.getElementById('filter-iva')?.value || '';
+        if (ivaFilter === 'con') filtered = filtered.filter(p => parseFloat(p.iva || 0) > 0);
+        else if (ivaFilter !== '') filtered = filtered.filter(p => parseFloat(p.iva || 0) === parseFloat(ivaFilter));
         return sortProductos(filtered);
     }
 
@@ -2008,8 +2023,9 @@ async function renderProductos() {
         }
         area.innerHTML = `<div class="product-grid" style="grid-template-columns:repeat(auto-fill, minmax(220px, 1fr))">${productos.map(p => `
             <div class="product-card" style="cursor:pointer" onclick="window._viewProducto(${p.id_producto})">
-                <div class="product-card-img">
+                <div class="product-card-img" style="position:relative">
                     ${p.foto ? `<img src="${UPLOADS_URL}${p.foto}" alt="${p.nombre}">` : '<i class="fas fa-box"></i>'}
+                    ${ivaBadge(p, 'iva-badge-float')}
                 </div>
                 <div class="product-card-body">
                     <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">${p.codigo || 'Sin código'} ${p.categoria ? '• ' + p.categoria.nombre : ''}</div>
@@ -2037,7 +2053,7 @@ async function renderProductos() {
                 <div class="table-wrapper">
                     <table class="data-table">
                         <thead><tr>
-                            <th>Foto</th><th>Código</th><th>Nombre</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Acciones</th>
+                            <th>Foto</th><th>Código</th><th>Nombre</th><th>Categoría</th><th>Precio</th><th>IVA</th><th>Stock</th><th>Acciones</th>
                         </tr></thead>
                         <tbody>
                             ${productos.map(p => `
@@ -2051,6 +2067,7 @@ async function renderProductos() {
                                     <td><strong>${p.nombre}</strong></td>
                                     <td><span style="font-size:12px;padding:3px 10px;background:var(--bg);border-radius:20px">${p.categoria?.nombre || '-'}</span></td>
                                     <td><strong style="color:var(--primary)">$${formatNumber(p.precio)}</strong></td>
+                                    <td>${ivaBadge(p)}</td>
                                     <td>
                                         <strong>${p.stock}</strong>
                                         ${p.stock <= p.stock_minimo ? '<span style="color:var(--danger);font-size:11px;margin-left:4px">(Bajo)</span>' : ''}
@@ -2097,6 +2114,11 @@ async function renderProductos() {
         renderProductView(getFilteredProducts());
     });
 
+    document.getElementById('filter-iva').addEventListener('change', function () {
+        localStorage.setItem('pc_prod_iva', this.value);
+        renderProductView(getFilteredProducts());
+    });
+
     // View full product detail
     window._viewProducto = (id) => {
         const p = allProductos.find(x => x.id_producto === id);
@@ -2111,6 +2133,7 @@ async function renderProductos() {
                 <div class="info-row"><label>Código</label><span>${p.codigo || '-'}</span></div>
                 <div class="info-row"><label>Categoría</label><span>${p.categoria?.nombre || '-'}</span></div>
                 <div class="info-row"><label>Precio</label><span style="color:var(--primary);font-weight:800;font-size:18px">$${formatNumber(p.precio)}</span></div>
+                <div class="info-row"><label>IVA</label><span>${ivaBadge(p)} <span style="font-size:12px;color:var(--text-muted);margin-left:4px">${parseFloat(p.iva || 0) > 0 ? 'incluido en el precio' : ''}</span></span></div>
                 <div class="info-row"><label>Stock</label><span><strong>${p.stock}</strong> unidades ${p.stock <= p.stock_minimo ? '<span class="badge-status badge-cancelado" style="margin-left:6px">Bajo</span>' : '<span class="badge-status badge-entregado" style="margin-left:6px">OK</span>'}</span></div>
                 <div class="info-row"><label>Stock Mínimo</label><span>${p.stock_minimo}</span></div>
                 ${p.descripcion ? `<div style="margin-top:12px"><label style="font-size:13px;color:var(--text-muted);font-weight:500">Descripción</label><p style="margin-top:4px;font-size:14px">${p.descripcion}</p></div>` : ''}

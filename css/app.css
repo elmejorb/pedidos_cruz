@@ -1655,6 +1655,16 @@ body {
    ======================================== */
 .modal-container.modal-wide { max-width: 920px; }
 
+/* Etiqueta de IVA en productos */
+.iva-badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 800; letter-spacing: .3px; white-space: nowrap; }
+.iva-badge.iva-19 { background: #EDE9FE; color: #6D28D9; }
+.iva-badge.iva-5 { background: #DBEAFE; color: #1D4ED8; }
+.iva-badge.iva-0 { background: var(--bg); color: var(--text-muted); }
+.iva-badge-float { position: absolute; top: 8px; left: 8px; box-shadow: var(--shadow); }
+.iva-badge-float.iva-0 { background: rgba(255,255,255,.92); }
+.iva-badge-float.iva-19 { background: #7C3AED; color: #fff; }
+.iva-badge-float.iva-5 { background: #2563EB; color: #fff; }
+
 /* Editar pedido: celular en una columna; computador en dos (buscar | productos del pedido) */
 .ep-suggest { max-height: 140px; overflow-y: auto; margin-bottom: 12px; }
 .ep-items { max-height: 280px; overflow-y: auto; }
