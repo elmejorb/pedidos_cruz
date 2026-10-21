@@ -1394,9 +1394,14 @@ async function renderNuevoPedido(forceNew = false) {
                         <h3><i class="fas fa-box-open" style="color:var(--primary);margin-right:8px"></i>Productos</h3>
                     </div>
                     <div class="card-body">
-                        <div class="search-box" style="margin-bottom:16px">
-                            <input type="text" id="search-prods-wizard" placeholder="Buscar producto...">
-                            <i class="fas fa-search"></i>
+                        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+                            <div class="search-box" style="flex:1;min-width:180px">
+                                <input type="text" id="search-prods-wizard" placeholder="Buscar producto...">
+                                <i class="fas fa-search"></i>
+                            </div>
+                            <select class="filter-select" id="sort-prods-wizard" title="Ordenar productos">
+                                ${ORDENES_PRODUCTO.map(([v, l]) => `<option value="${v}" ${(localStorage.getItem('pc_wiz_sort') || 'reciente') === v ? 'selected' : ''}>${l}</option>`).join('')}
+                            </select>
                         </div>
                         <div class="product-grid" id="products-grid"></div>
                     </div>
@@ -1428,6 +1433,7 @@ async function renderNuevoPedido(forceNew = false) {
                         ${p.foto ? `<img src="${UPLOADS_URL}${p.foto}" alt="${p.nombre}">` : '<i class="fas fa-box"></i>'}
                         ${p.foto ? `<button onclick="event.stopPropagation();window._previewFoto(${p.id_producto})" title="Ver imagen" style="position:absolute;top:6px;right:6px;width:32px;height:32px;border-radius:50%;border:none;background:rgba(0,0,0,0.65);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;backdrop-filter:blur(4px)"><i class="fas fa-search-plus"></i></button>` : ''}
                     </div>
+                    ${esProductoNuevo(p) ? '<span class="badge-nuevo">NUEVO</span>' : ''}
                     <div class="product-card-body">
                         <h4>${p.nombre}</h4>
                         <div class="price">$${formatNumber(p.precio)}</div>
@@ -1513,24 +1519,25 @@ async function renderNuevoPedido(forceNew = false) {
             `;
         }
 
-        renderProducts(allProductos);
+        renderProducts(getFilteredWizardProducts());
         renderCart();
 
         document.getElementById('search-prods-wizard').addEventListener('input', debounce(function () {
-            const term = this.value.toLowerCase();
-            renderProducts(allProductos.filter(p =>
-                p.nombre.toLowerCase().includes(term) ||
-                (p.codigo || '').toLowerCase().includes(term)
-            ));
+            renderProducts(getFilteredWizardProducts());
         }, 300));
+        document.getElementById('sort-prods-wizard').addEventListener('change', function () {
+            localStorage.setItem('pc_wiz_sort', this.value);
+            renderProducts(getFilteredWizardProducts());
+        });
 
         function getFilteredWizardProducts() {
             const term = (document.getElementById('search-prods-wizard')?.value || '').toLowerCase();
-            if (!term) return allProductos;
-            return allProductos.filter(p =>
+            const orden = document.getElementById('sort-prods-wizard')?.value || 'reciente';
+            const lista = !term ? allProductos : allProductos.filter(p =>
                 p.nombre.toLowerCase().includes(term) ||
                 (p.codigo || '').toLowerCase().includes(term)
             );
+            return ordenarProductos(lista, orden);
         }
 
         window._addToCart = (id) => {
@@ -1912,6 +1919,25 @@ function openClientModal(callback, editData = null) {
 // ========================================
 // PRODUCTOS
 // ========================================
+/** Producto creado en los últimos 15 días */
+function esProductoNuevo(p) {
+    if (!p.created_at) return false;
+    return (Date.now() - new Date(String(p.created_at).replace(' ', 'T')).getTime()) < 15 * 86400000;
+}
+
+const ORDENES_PRODUCTO = [['reciente', 'Más recientes'], ['antiguo', 'Más antiguos'], ['nombre', 'A-Z'], ['precio_asc', 'Precio menor'], ['precio_desc', 'Precio mayor']];
+
+function ordenarProductos(lista, modo) {
+    const l = [...lista];
+    switch (modo) {
+        case 'antiguo': return l.sort((a, b) => a.id_producto - b.id_producto);
+        case 'nombre': return l.sort((a, b) => a.nombre.localeCompare(b.nombre));
+        case 'precio_asc': return l.sort((a, b) => parseFloat(a.precio) - parseFloat(b.precio));
+        case 'precio_desc': return l.sort((a, b) => parseFloat(b.precio) - parseFloat(a.precio));
+        default: return l.sort((a, b) => b.id_producto - a.id_producto);
+    }
+}
+
 /** Etiqueta de IVA del producto (IVA incluido en el precio) */
 function ivaBadge(p, extra = '') {
     const iva = parseFloat(p.iva || 0);
@@ -2037,6 +2063,7 @@ async function renderProductos() {
                 <div class="product-card-img" style="position:relative">
                     ${p.foto ? `<img src="${UPLOADS_URL}${p.foto}" alt="${p.nombre}">` : '<i class="fas fa-box"></i>'}
                     ${ivaBadge(p, 'iva-badge-float')}
+                    ${esProductoNuevo(p) ? '<span class="badge-nuevo">NUEVO</span>' : ''}
                 </div>
                 <div class="product-card-body">
                     <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">${p.codigo || 'Sin código'} ${p.categoria ? '• ' + p.categoria.nombre : ''}${p.proveedor ? ' • <i class="fas fa-truck-field"></i> ' + p.proveedor.nombre : ''}</div>

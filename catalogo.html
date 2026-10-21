@@ -237,6 +237,30 @@
             pointer-events: none;
         }
         .product:hover .product-zoom { opacity: 1; }
+        .orden-select {
+            padding: 12px 14px;
+            border: 2px solid #E2E8F0;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            background: #fff;
+            color: #334155;
+            cursor: pointer;
+        }
+        .product-nuevo {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            background: #10B981;
+            color: #fff;
+            font-size: 10.5px;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 10px;
+            letter-spacing: 0.6px;
+            box-shadow: 0 2px 8px rgba(16,185,129,.4);
+        }
         .product-cat {
             position: absolute;
             top: 12px;
@@ -491,6 +515,13 @@
                     <i class="fas fa-search"></i>
                     <input type="text" id="search" placeholder="Buscar producto por nombre o código...">
                 </div>
+                <select id="orden" class="orden-select" title="Ordenar">
+                    <option value="nombre">A-Z</option>
+                    <option value="reciente">Más recientes</option>
+                    <option value="antiguo">Más antiguos</option>
+                    <option value="precio_asc">Precio menor</option>
+                    <option value="precio_desc">Precio mayor</option>
+                </select>
                 <div class="result-count" id="result-count">Cargando...</div>
             </div>
             <div class="categorias-chips" id="categorias-chips"></div>
@@ -590,6 +621,19 @@
             }
         }
 
+        function esNuevo(p) {
+            return p.created_at && (Date.now() - new Date(String(p.created_at).replace(' ', 'T')).getTime()) < 15 * 86400000;
+        }
+
+        function ordenar(lista) {
+            const modo = document.getElementById('orden').value, l = [...lista];
+            if (modo === 'reciente') return l.sort((a, b) => b.id_producto - a.id_producto);
+            if (modo === 'antiguo') return l.sort((a, b) => a.id_producto - b.id_producto);
+            if (modo === 'precio_asc') return l.sort((a, b) => a.precio - b.precio);
+            if (modo === 'precio_desc') return l.sort((a, b) => b.precio - a.precio);
+            return l.sort((a, b) => a.nombre.localeCompare(b.nombre));
+        }
+
         function renderProductos() {
             const area = document.getElementById('products-area');
             const count = document.getElementById('result-count');
@@ -601,11 +645,12 @@
                 return;
             }
 
-            area.innerHTML = '<div class="products-grid">' + allProductos.map(p => `
+            area.innerHTML = '<div class="products-grid">' + ordenar(allProductos).map(p => `
                 <div class="product" onclick="verProducto(${p.id_producto})">
                     <div class="product-img">
                         ${p.foto ? `<img src="${UPLOADS}${p.foto}" alt="${p.nombre}" loading="lazy">` : '<i class="fas fa-box"></i>'}
                         ${p.categoria ? `<span class="product-cat">${p.categoria.nombre}</span>` : ''}
+                        ${esNuevo(p) ? '<span class="product-nuevo">NUEVO</span>' : ''}
                         ${p.foto ? '<span class="product-zoom"><i class="fas fa-search-plus"></i></span>' : ''}
                     </div>
                     <div class="product-body">
@@ -669,6 +714,7 @@
         });
 
         document.getElementById('search').addEventListener('input', debounce(cargarProductos, 350));
+        document.getElementById('orden').addEventListener('change', renderProductos);
 
         // Init
         cargarCategorias();

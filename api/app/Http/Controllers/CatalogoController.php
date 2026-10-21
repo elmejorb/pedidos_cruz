@@ -42,7 +42,7 @@ class CatalogoController extends Controller
 
         $query = Producto::with('categoria:id_categoria,nombre')
             ->where('activo', 1)
-            ->select('id_producto', 'codigo', 'nombre', 'descripcion', 'id_categoria', 'precio', 'foto');
+            ->select('id_producto', 'codigo', 'nombre', 'descripcion', 'id_categoria', 'precio', 'foto', 'created_at');
 
         if ($catalogo) $query->whereIn('id_producto', $this->idsCatalogo($catalogo));
 

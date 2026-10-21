@@ -1744,6 +1744,9 @@ body {
 
 /* Reporte de inventario */
 .inv-stat { cursor: pointer; }
+.product-card { position: relative; }
+.badge-nuevo { position: absolute; top: 8px; left: 8px; z-index: 2; background: var(--gradient-green); color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .6px; padding: 3px 9px; border-radius: 10px; box-shadow: 0 2px 8px rgba(16,185,129,.4); }
+.product-card-img .badge-nuevo { top: auto; left: auto; bottom: 8px; right: 8px; }
 #rep-body .stat-value { font-size: 22px; white-space: nowrap; }
 #rep-body .stat-card, #rep-body .stat-info { min-width: 0; }
 #rep-body .cr-stat-sub { white-space: normal; }
