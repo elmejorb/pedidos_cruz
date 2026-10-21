@@ -1660,13 +1660,17 @@ body {
 .ep-items { max-height: 280px; overflow-y: auto; }
 .ep-pedido { margin-bottom: 16px; }
 @media (min-width: 960px) {
-    .modal-container.modal-edit-pedido { max-width: 1120px; }
-    .edit-pedido-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); grid-template-areas: "buscar pedido" "opciones pedido"; gap: 6px 24px; align-items: start; }
+    /* El modal ocupa la altura de la pantalla y NO se desplaza: solo las listas internas */
+    .modal-container.modal-edit-pedido { max-width: 1120px; height: 92vh; max-height: 92vh; overflow: hidden; display: flex; flex-direction: column; }
+    .modal-edit-pedido .modal-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 8px; }
+    .modal-edit-pedido .modal-footer { border-top: 1px solid var(--border-light); padding-top: 14px; }
+    .edit-pedido-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "buscar pedido" "opciones pedido"; gap: 6px 24px; }
     .ep-buscar { grid-area: buscar; }
-    .ep-opciones { grid-area: opciones; }
-    .ep-pedido { grid-area: pedido; margin-bottom: 0; padding-left: 24px; border-left: 1px solid var(--border-light); position: sticky; top: 0; }
-    .ep-suggest { max-height: 300px; }
-    .ep-items { max-height: calc(100vh - 360px); min-height: 220px; }
+    .ep-opciones { grid-area: opciones; min-height: 0; overflow-y: auto; padding-right: 4px; }
+    .ep-pedido { grid-area: pedido; min-height: 0; margin-bottom: 0; padding-left: 24px; border-left: 1px solid var(--border-light); display: flex; flex-direction: column; }
+    .ep-pedido .cart-summary { flex-shrink: 0; }
+    .ep-suggest { max-height: 34vh; }
+    .ep-items { flex: 1; min-height: 0; max-height: none; padding-right: 4px; }
 }
 .detail-grid > * { min-width: 0; }
 #main-content { min-width: 0; }
