@@ -320,7 +320,8 @@ class FacturacionElectronicaService
                 'cufe' => $body['cufe'],
                 'prefijo' => $body['prefix'] ?? $this->config->resolucion_prefijo,
                 'numero' => $body['consecutive'] ?? null,
-                'fecha_emision' => trim(($body['fecha'] ?? $prep['fecha']) . ' ' . ($body['hora'] ?? $prep['hora'])),
+                // Fecha/hora que enviamos (hora Colombia); la API responde la hora en UTC
+                'fecha_emision' => $prep['fecha'] . ' ' . $prep['hora'],
                 'mensaje_dian' => mb_substr($body['message'] ?? 'Factura autorizada', 0, 500),
                 'errores' => null,
                 'email_enviado' => !empty($email['success']) ? 1 : 0,
