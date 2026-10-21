@@ -89,7 +89,7 @@ function openModal(title, bodyHTML, footerHTML = '') {
     document.getElementById('modal-title').textContent = title;
     document.getElementById('modal-body').innerHTML = bodyHTML;
     document.getElementById('modal-footer').innerHTML = footerHTML;
-    document.getElementById('modal-container').classList.remove('modal-wide');
+    document.getElementById('modal-container').classList.remove('modal-wide', 'modal-edit-pedido');
     document.getElementById('modal-overlay').classList.add('show');
 }
 
@@ -914,35 +914,42 @@ window._editarPedido = async (id) => {
                 <strong>Cliente:</strong> ${p.cliente?.nombre || 'N/A'} • <strong>Estado:</strong> <span class="badge-status badge-${p.estado}">${p.estado}</span>
             </div>
 
-            <div class="search-box" style="margin-bottom:12px">
-                <input type="text" id="edit-search-prod" placeholder="Buscar producto para agregar...">
-                <i class="fas fa-search"></i>
-            </div>
-            <div id="edit-prod-suggest" style="max-height:140px;overflow-y:auto;margin-bottom:12px"></div>
+            <div class="edit-pedido-grid">
+                <div class="ep-buscar">
+                    <div class="search-box" style="margin-bottom:12px">
+                        <input type="text" id="edit-search-prod" placeholder="Buscar producto para agregar...">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <div id="edit-prod-suggest" class="ep-suggest"></div>
+                </div>
 
-            <h4 style="font-size:13px;color:var(--text-muted);margin-bottom:8px">PRODUCTOS DEL PEDIDO (${editCart.length})</h4>
-            <div id="edit-cart-items" style="max-height:280px;overflow-y:auto"></div>
+                <div class="ep-pedido">
+                    <h4 style="font-size:13px;color:var(--text-muted);margin-bottom:8px">PRODUCTOS DEL PEDIDO (<span id="edit-cart-count">${editCart.length}</span>)</h4>
+                    <div id="edit-cart-items" class="ep-items"></div>
+                    <div class="cart-summary" style="margin-top:16px">
+                        <div class="cart-summary-row total"><span>Total</span><span id="edit-total">$${formatNumber(subtotal)}</span></div>
+                    </div>
+                </div>
 
-            <div class="cart-summary" style="margin-top:16px">
-                <div class="cart-summary-row total"><span>Total</span><span id="edit-total">$${formatNumber(subtotal)}</span></div>
-            </div>
-
-            <div style="margin-top:16px">${crFormaPagoHTML('ed', p.forma_pago || 'contado', p.dias_credito || 30)}</div>
-
-            <div class="form-group" style="margin-top:16px;margin-bottom:8px">
-                <label>Ruta de despacho</label>
-                <select id="edit-ruta" style="padding:12px 14px;border:2px solid var(--border);border-radius:var(--radius);width:100%;font-family:var(--font);font-size:14px">
-                    <option value="">Sin ruta asignada</option>
-                </select>
-            </div>
-            <div class="form-group" style="margin-bottom:0">
-                <label>Notas</label>
-                <textarea id="edit-notas" style="padding-left:14px">${p.notas || ''}</textarea>
+                <div class="ep-opciones">
+                    ${crFormaPagoHTML('ed', p.forma_pago || 'contado', p.dias_credito || 30)}
+                    <div class="form-group" style="margin-top:16px;margin-bottom:8px">
+                        <label>Ruta de despacho</label>
+                        <select id="edit-ruta" style="padding:12px 14px;border:2px solid var(--border);border-radius:var(--radius);width:100%;font-family:var(--font);font-size:14px">
+                            <option value="">Sin ruta asignada</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0">
+                        <label>Notas</label>
+                        <textarea id="edit-notas" style="padding-left:14px">${p.notas || ''}</textarea>
+                    </div>
+                </div>
             </div>
         `, `
             <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
             <button class="btn btn-primary" id="edit-pedido-save"><i class="fas fa-save"></i> Guardar Cambios</button>
         `);
+        document.getElementById('modal-container').classList.add('modal-edit-pedido');
 
         renderEditCart();
         crInitFormaPago('ed', null, p.fecha_pedido);
@@ -1053,24 +1060,29 @@ window._editarPedido = async (id) => {
             }).join('');
         }
         total.textContent = '$' + formatNumber(subtotal);
+        const count = document.getElementById('edit-cart-count');
+        if (count) count.textContent = editCart.length;
     }
 
     window._editAddProd = (idProd) => {
         const existing = editCart.find(c => c.id_producto === idProd);
+        const pr = allProductos.find(x => x.id_producto === idProd);
         if (existing) { existing.cantidad++; }
         else {
-            const pr = allProductos.find(x => x.id_producto === idProd);
             editCart.push({
                 id_producto: pr.id_producto,
                 nombre: pr.nombre,
                 precio_unitario: parseFloat(pr.precio),
                 cantidad: 1,
                 foto: pr.foto,
+                tipo_unidad: 'unidad',
+                unidades_por_caja: parseInt(pr.unidades_por_caja) || 1,
+                precio_base: parseFloat(pr.precio),
             });
         }
-        document.getElementById('edit-search-prod').value = '';
-        document.getElementById('edit-prod-suggest').innerHTML = '';
+        // Se conserva la búsqueda para seguir agregando productos del mismo filtro
         renderEditCart();
+        toast(`${pr.nombre} agregado`, 'success', 1500);
     };
     window._editQty = (i, d) => { editCart[i].cantidad = Math.max(1, editCart[i].cantidad + d); renderEditCart(); };
     window._editSetQty = (i, v) => { editCart[i].cantidad = Math.max(1, parseInt(v) || 1); renderEditCart(); };

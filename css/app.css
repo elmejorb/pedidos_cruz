@@ -1654,6 +1654,20 @@ body {
    FACTURACIÓN ELECTRÓNICA
    ======================================== */
 .modal-container.modal-wide { max-width: 920px; }
+
+/* Editar pedido: celular en una columna; computador en dos (buscar | productos del pedido) */
+.ep-suggest { max-height: 140px; overflow-y: auto; margin-bottom: 12px; }
+.ep-items { max-height: 280px; overflow-y: auto; }
+.ep-pedido { margin-bottom: 16px; }
+@media (min-width: 960px) {
+    .modal-container.modal-edit-pedido { max-width: 1120px; }
+    .edit-pedido-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); grid-template-areas: "buscar pedido" "opciones pedido"; gap: 6px 24px; align-items: start; }
+    .ep-buscar { grid-area: buscar; }
+    .ep-opciones { grid-area: opciones; }
+    .ep-pedido { grid-area: pedido; margin-bottom: 0; padding-left: 24px; border-left: 1px solid var(--border-light); position: sticky; top: 0; }
+    .ep-suggest { max-height: 300px; }
+    .ep-items { max-height: calc(100vh - 360px); min-height: 220px; }
+}
 .detail-grid > * { min-width: 0; }
 #main-content { min-width: 0; }
 
