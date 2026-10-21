@@ -71,6 +71,7 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     // Reportes
     $router->get('/reportes/ventas', 'PedidoController@reporteVentas');
     $router->get('/reportes/cierre', 'ReporteController@cierre');
+    $router->get('/reportes/stock', 'ReporteController@stock');
 
     // Catálogos y proveedores
     $router->get('/catalogos', 'CatalogoAdminController@index');

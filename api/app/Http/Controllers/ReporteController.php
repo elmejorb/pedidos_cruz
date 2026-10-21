@@ -10,6 +10,50 @@ use Carbon\Carbon;
 class ReporteController extends Controller
 {
     /**
+     * Inventario: stock de productos activos con ventas de los últimos 30 días
+     * (unidades equivalentes en pedidos no cancelados). El frontend filtra.
+     */
+    public function stock(Request $request)
+    {
+        if ($request->usuario->rol !== 'admin') {
+            return response()->json(['error' => true, 'mensaje' => 'No tienes permisos para ver reportes'], 403);
+        }
+
+        $catalogos = Schema::hasTable('pc_catalogo_producto');
+        $proveedores = Schema::hasTable('pc_proveedores');
+        $desde = Carbon::now()->subDays(30);
+
+        $vendidos = DB::table('pc_pedido_detalle as d')
+            ->join('pc_pedidos as p', 'p.id_pedido', '=', 'd.id_pedido')
+            ->where('p.estado', '!=', 'cancelado')
+            ->where('p.fecha_pedido', '>=', $desde)
+            ->groupBy('d.id_producto')
+            ->select('d.id_producto', DB::raw('SUM(COALESCE(d.unidades_equivalentes, d.cantidad)) as vendidos_30d'), DB::raw('MAX(p.fecha_pedido) as ultima_venta'));
+
+        $q = DB::table('pc_productos as pr')
+            ->leftJoin('pc_categorias as c', 'c.id_categoria', '=', 'pr.id_categoria')
+            ->leftJoinSub($vendidos, 'v', 'v.id_producto', '=', 'pr.id_producto')
+            ->where('pr.activo', 1)
+            ->select('pr.id_producto', 'pr.codigo', 'pr.nombre', 'pr.foto', 'pr.precio', 'pr.stock', 'pr.stock_minimo',
+                'pr.unidades_por_caja', 'pr.id_categoria', 'c.nombre as categoria',
+                DB::raw('COALESCE(v.vendidos_30d, 0) as vendidos_30d'), 'v.ultima_venta');
+
+        if ($proveedores) {
+            $q->leftJoin('pc_proveedores as pv', 'pv.id_proveedor', '=', 'pr.id_proveedor')
+              ->addSelect('pr.id_proveedor', 'pv.nombre as proveedor', 'pr.precio_costo');
+        }
+
+        $productos = $q->orderBy('pr.nombre')->get();
+
+        if ($catalogos) {
+            $map = DB::table('pc_catalogo_producto')->get()->groupBy('id_producto');
+            $productos->each(fn($p) => $p->catalogos = ($map[$p->id_producto] ?? collect())->pluck('id_catalogo')->values());
+        }
+
+        return response()->json(['error' => false, 'productos' => $productos, 'generado' => Carbon::now()->toDateTimeString()]);
+    }
+
+    /**
      * Cierre de mes (solo consulta, no cierra nada).
      * Devuelve todos los pedidos del mes con sus datos para que el frontend
      * calcule totales según los pedidos/estados que el usuario incluya.

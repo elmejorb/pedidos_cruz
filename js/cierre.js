@@ -21,6 +21,7 @@ async function renderReportes() {
     container.innerHTML = `
         <div class="cr-tabs">
             <button class="cr-tab active" data-tab="cierre"><i class="fas fa-calendar-check"></i> Cierre de mes</button>
+            <button class="cr-tab" data-tab="inventario"><i class="fas fa-boxes-stacked"></i> Inventario</button>
             <button class="cr-tab" data-tab="general"><i class="fas fa-chart-line"></i> General</button>
         </div>
         <div id="rep-body"></div>`;
@@ -29,7 +30,9 @@ async function renderReportes() {
         container.querySelectorAll('.cr-tab').forEach(x => x.classList.toggle('active', x === b));
         const body = document.getElementById('rep-body');
         body.innerHTML = '<div style="text-align:center;padding:40px"><div class="loading-spinner" style="border-color:var(--border);border-top-color:var(--primary);margin:0 auto"></div></div>';
-        b.dataset.tab === 'cierre' ? renderCierreMes(body) : renderReportesGeneral(body);
+        if (b.dataset.tab === 'cierre') renderCierreMes(body);
+        else if (b.dataset.tab === 'inventario') renderInventario(body);
+        else renderReportesGeneral(body);
     };
     renderCierreMes(document.getElementById('rep-body'));
 }
@@ -85,6 +88,7 @@ async function renderCierreMes(root) {
     async function cargar() {
         $('cm-content').innerHTML = '<div style="text-align:center;padding:40px"><div class="loading-spinner" style="border-color:var(--border);border-top-color:var(--primary);margin:0 auto"></div></div>';
         const d = await api(`/reportes/cierre?anio=${st.anio}&mes=${st.mes}`);
+        if (!$('cm-content')) return; // el usuario cambió de pestaña mientras cargaba
         if (!d || d.error) {
             $('cm-content').innerHTML = `<div class="empty-state"><i class="fas fa-circle-exclamation"></i><h3>No se pudo cargar</h3><p>${cmEsc(d?.mensaje || '')}</p></div>`;
             return;
@@ -170,6 +174,7 @@ async function renderCierreMes(root) {
     }
 
     function pintar() {
+        if (!$('cm-content')) return;
         st.charts.forEach(c => c.destroy()); st.charts = [];
         const c = calcular();
         const cmp = st.data.comparativo;

@@ -1742,6 +1742,23 @@ body {
 .ca-info span { font-size: 11.5px; color: var(--text-muted); }
 .ca-precio { font-weight: 800; color: var(--primary); font-size: 13px; }
 
+/* Reporte de inventario */
+.inv-stat { cursor: pointer; }
+#rep-body .stat-value { font-size: 22px; white-space: nowrap; }
+#rep-body .stat-card, #rep-body .stat-info { min-width: 0; }
+#rep-body .cr-stat-sub { white-space: normal; }
+.inv-prod { display: flex; align-items: center; gap: 10px; min-width: 200px; }
+.inv-prod div:last-child { display: flex; flex-direction: column; font-size: 13px; }
+.inv-prod span { font-size: 11px; color: var(--text-muted); }
+.inv-img { width: 40px; height: 40px; border-radius: 8px; background: var(--bg); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; color: var(--text-muted); }
+.inv-img img { width: 100%; height: 100%; object-fit: cover; }
+.inv-stock { display: inline-block; min-width: 42px; padding: 4px 10px; border-radius: 12px; font-weight: 800; font-size: 13px; }
+.inv-stock.agotado { background: var(--danger-light); color: #991B1B; }
+.inv-stock.bajo { background: var(--warning-light); color: #92400E; }
+.inv-stock.ok { background: var(--success-light); color: #065F46; }
+.inv-row.agotado td:first-child { box-shadow: inset 4px 0 0 var(--danger); }
+.inv-row.bajo td:first-child { box-shadow: inset 4px 0 0 var(--warning); }
+
 /* Etiqueta de IVA en productos */
 .iva-badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 800; letter-spacing: .3px; white-space: nowrap; }
 .iva-badge.iva-19 { background: #EDE9FE; color: #6D28D9; }
