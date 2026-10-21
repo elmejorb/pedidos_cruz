@@ -25,7 +25,15 @@ const FE = {
         rechazada: { label: 'Rechazada', icon: 'fa-times-circle' },
         error: { label: 'Error de envío', icon: 'fa-plug-circle-xmark' },
         pendiente: { label: 'Enviando', icon: 'fa-clock' },
+        anulada: { label: 'Anulada', icon: 'fa-ban' },
     },
+    CONCEPTOS_NC: [
+        [2, 'Anulación de factura electrónica', 'La factura queda sin efecto. Se envía NC por el total de la factura original.', true],
+        [1, 'Devolución parcial de bienes / no aceptación parcial del servicio', 'Próximamente — requiere selección de ítems y cantidades.', false],
+        [3, 'Rebaja o descuento parcial o total', 'Próximamente — requiere campo de rebaja.', false],
+        [4, 'Ajuste de precio', 'Próximamente — requiere precio nuevo por ítem.', false],
+        [5, 'Otros', 'Próximamente.', false],
+    ],
     QR_BASE: 'https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=',
     CONSUMIDOR_FINAL: '222222222',
 };
@@ -70,6 +78,9 @@ function fePedidoChip(f) {
     }
     if (f.estado === 'rechazada' || f.estado === 'error') {
         return `<span class="fe-chip bad" title="Factura rechazada / con error"><i class="fas fa-triangle-exclamation"></i>FE</span>`;
+    }
+    if (f.estado === 'anulada') {
+        return `<span class="fe-chip anulada" title="Factura anulada con nota crédito"><i class="fas fa-ban"></i>${feEsc(feNumero(f))}</span>`;
     }
     return '';
 }
@@ -128,13 +139,16 @@ function feCardPedido(p) {
     if (p.estado === 'cancelado') return '';
 
     const rechazo = f && (f.estado === 'rechazada' || f.estado === 'error');
+    const anulada = f && f.estado === 'anulada';
     return `
         <div class="card fe-card-pedido ${rechazo ? 'bad' : ''}" style="margin-bottom:20px">
             <div class="card-body">
                 <div class="fe-card-title"><i class="fas ${rechazo ? 'fa-triangle-exclamation' : 'fa-file-invoice-dollar'}"></i> Facturación Electrónica</div>
                 ${rechazo
                     ? `<div class="fe-card-sub" style="margin:6px 0 12px">Último intento ${f.estado === 'error' ? 'con error' : 'rechazado por la DIAN'}:<br><em>${feEsc(f.mensaje_dian || '')}</em></div>`
-                    : `<div class="fe-card-sub" style="margin:6px 0 12px">Convierte este pedido en factura electrónica válida ante la DIAN.</div>`}
+                    : anulada
+                        ? `<div class="fe-card-sub" style="margin:6px 0 12px">La factura <a class="fe-link" onclick="viewFactura(${f.id_factura})">${feEsc(feNumero(f))}</a> fue <b>anulada</b> con nota crédito. Puedes volver a facturar el pedido.</div>`
+                        : `<div class="fe-card-sub" style="margin:6px 0 12px">Convierte este pedido en factura electrónica válida ante la DIAN.</div>`}
                 <button class="btn btn-block fe-btn-main" onclick="abrirFacturarPedido(${p.id_pedido}, ${p.id_cliente}, '${p.forma_pago || 'contado'}', ${parseInt(p.dias_credito) || 0})">
                     <i class="fas fa-paper-plane"></i> ${rechazo ? 'Corregir y reintentar' : 'Facturar electrónicamente'}
                 </button>
@@ -339,7 +353,7 @@ async function renderFacturas() {
                 <i class="fas fa-search"></i>
             </div>
             <div class="fe-chips" id="fe-chips">
-                ${[['', 'Todas'], ['autorizada', 'Autorizadas'], ['rechazada', 'Rechazadas'], ['error', 'Con error']]
+                ${[['', 'Todas'], ['autorizada', 'Autorizadas'], ['anulada', 'Anuladas'], ['rechazada', 'Rechazadas'], ['error', 'Con error']]
                     .map(([v, l]) => `<button class="fe-chip-filter ${v === '' ? 'active' : ''}" data-estado="${v}">${l}</button>`).join('')}
             </div>
             <input type="date" class="filter-select" id="fe-desde" title="Desde">
@@ -422,7 +436,9 @@ async function renderFacturas() {
                         <button class="btn btn-ghost btn-sm" onclick="feImprimirCarta(${f.id_factura})" title="PDF carta"><i class="fas fa-file-pdf" style="color:#DC2626"></i></button>
                         <button class="btn btn-ghost btn-sm" onclick="feImprimirTicket(${f.id_factura})" title="Ticket 80mm"><i class="fas fa-receipt"></i></button>
                         <button class="btn btn-ghost btn-sm" onclick="feEnviarEmail(${f.id_factura}, '${feEsc(f.cliente_email || '')}')" title="Enviar por email"><i class="fas fa-envelope"></i></button>`
-                    : `<button class="btn btn-ghost btn-sm" onclick="feReintentar(${f.id_factura})" title="Reintentar envío"><i class="fas fa-rotate" style="color:var(--warning)"></i></button>`}
+                    : f.estado === 'anulada'
+                        ? `<button class="btn btn-ghost btn-sm" onclick="feImprimirCarta(${f.id_factura})" title="PDF (anulada)"><i class="fas fa-file-pdf" style="color:var(--text-muted)"></i></button>`
+                        : `<button class="btn btn-ghost btn-sm" onclick="feReintentar(${f.id_factura})" title="Reintentar envío"><i class="fas fa-rotate" style="color:var(--warning)"></i></button>`}
                 </td>
             </tr>`).join('');
     }
@@ -456,11 +472,16 @@ async function viewFactura(id, skipHash = false) {
         if (location.hash !== h) history.pushState(null, '', h);
     }
     document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === 'facturas'));
-    document.getElementById('header-title').textContent = f.estado === 'autorizada' ? `Factura ${feNumero(f)}` : 'Intento de facturación';
+    document.getElementById('header-title').textContent = f.estado === 'autorizada' ? `Factura ${feNumero(f)}`
+        : f.estado === 'anulada' ? `Factura ${feNumero(f)} (anulada)` : 'Intento de facturación';
     document.getElementById('header-action-btn').style.display = 'none';
 
     const ok = f.estado === 'autorizada';
-    const qr = ok ? feQrDataURL(f.cufe, 5) : '';
+    const anulada = f.estado === 'anulada';
+    const conCufe = ok || anulada;
+    const qr = conCufe ? feQrDataURL(f.cufe, 5) : '';
+    const nc = (f.notas_credito || []).find(n => n.estado === 'autorizada');
+    const ncFallidas = (f.notas_credito || []).filter(n => n.estado === 'rechazada' || n.estado === 'error');
     const ivas = feResumenIva(f.detalles || []);
 
     document.getElementById('page-container').innerHTML = `
@@ -471,17 +492,20 @@ async function viewFactura(id, skipHash = false) {
             ${ok ? `
                 <button class="btn btn-outline btn-sm" onclick="feImprimirCarta(${f.id_factura})"><i class="fas fa-file-pdf"></i> PDF Carta</button>
                 <button class="btn btn-outline btn-sm" onclick="feImprimirTicket(${f.id_factura})"><i class="fas fa-receipt"></i> Ticket</button>
-                <button class="btn btn-outline btn-sm" onclick="feEnviarEmail(${f.id_factura}, '${feEsc(f.cliente_email || '')}')"><i class="fas fa-envelope"></i> Email</button>`
+                <button class="btn btn-outline btn-sm" onclick="feEnviarEmail(${f.id_factura}, '${feEsc(f.cliente_email || '')}')"><i class="fas fa-envelope"></i> Email</button>
+                <button class="btn btn-sm fe-btn-anular" onclick="feAnular(${f.id_factura})"><i class="fas fa-ban"></i> Anular (Nota Crédito)</button>`
+            : anulada ? `
+                <button class="btn btn-outline btn-sm" onclick="feImprimirCarta(${f.id_factura})"><i class="fas fa-file-pdf"></i> PDF (anulada)</button>`
             : `
                 <button class="btn btn-warning btn-sm" onclick="feReintentar(${f.id_factura})"><i class="fas fa-rotate"></i> Reintentar envío</button>
                 <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="feEliminarIntento(${f.id_factura})"><i class="fas fa-trash"></i></button>`}
             <button class="btn btn-ghost btn-sm" onclick="feVerTrazas(${f.id_factura})" title="JSON enviado / respuesta API"><i class="fas fa-code"></i></button>
         </div>
 
-        <div class="fe-hero ${ok ? 'ok' : 'bad'} fade-in">
+        <div class="fe-hero ${ok ? 'ok' : anulada ? 'anulada' : 'bad'} fade-in">
             <div>
-                <div class="fe-hero-label">${ok ? 'FACTURA ELECTRÓNICA DE VENTA' : 'FACTURA NO AUTORIZADA'}</div>
-                <div class="fe-hero-num">${ok ? feEsc(feNumero(f)) : feEsc(FE.ESTADOS[f.estado]?.label || f.estado)}</div>
+                <div class="fe-hero-label">${ok ? 'FACTURA ELECTRÓNICA DE VENTA' : anulada ? 'FACTURA ANULADA CON NOTA CRÉDITO' : 'FACTURA NO AUTORIZADA'}</div>
+                <div class="fe-hero-num">${conCufe ? feEsc(feNumero(f)) : feEsc(FE.ESTADOS[f.estado]?.label || f.estado)}</div>
                 <div class="fe-hero-sub">${feEsc(f.cliente_nombre)} · ${formatDate(f.fecha_emision || f.created_at)}</div>
             </div>
             <div style="text-align:right">
@@ -493,7 +517,27 @@ async function viewFactura(id, skipHash = false) {
 
         <div class="detail-grid fade-in">
             <div>
-                ${!ok && f.errores?.length ? `
+                ${nc ? `
+                    <div class="card fe-nc-card" style="margin-bottom:20px">
+                        <div class="card-body">
+                            <div class="fe-nc-title"><i class="fas fa-file-circle-minus"></i> Nota Crédito ${feEsc((nc.prefijo || '') + (nc.numero || ''))} <span class="badge-status badge-fe-autorizada" style="margin-left:6px">Autorizada</span></div>
+                            <div class="fe-nc-grid">
+                                <div><span>Concepto</span><strong>2 · Anulación de factura electrónica</strong></div>
+                                <div><span>Valor</span><strong>${feMoney(nc.total)}</strong></div>
+                                <div><span>Fecha</span><strong>${formatDate(nc.fecha_emision || nc.created_at)}</strong></div>
+                                <div><span>Emitida por</span><strong>${feEsc(nc.usuario?.nombre || '-')}</strong></div>
+                            </div>
+                            <div class="fe-nc-motivo"><b>Motivo:</b> ${feEsc(nc.motivo)}</div>
+                            <div class="fe-cufe" style="margin:10px 0 0;max-width:none">CUDE: ${feEsc(nc.cufe || '')}</div>
+                        </div>
+                    </div>` : ''}
+                ${ok && ncFallidas.length ? `
+                    <div class="fe-alert warning" style="margin-bottom:20px">
+                        <div class="fe-alert-title"><i class="fas fa-triangle-exclamation"></i> Intento de anulación fallido</div>
+                        ${feEsc(ncFallidas[ncFallidas.length - 1].mensaje_dian || '')}
+                        ${(ncFallidas[ncFallidas.length - 1].errores || []).length ? `<ul>${ncFallidas[ncFallidas.length - 1].errores.map(e => `<li><code>${feEsc(e.code)}</code> ${feEsc(e.message)}</li>`).join('')}</ul>` : ''}
+                    </div>` : ''}
+                ${!conCufe && f.errores?.length ? `
                     <div class="fe-alert danger" style="margin-bottom:20px">
                         <div class="fe-alert-title"><i class="fas fa-circle-xmark"></i> ${feEsc(f.mensaje_dian || 'Respuesta de la DIAN')}</div>
                         <ul>${f.errores.map(e => `<li><code>${feEsc(e.code)}</code> ${feEsc(e.message)}</li>`).join('')}</ul>
@@ -527,7 +571,7 @@ async function viewFactura(id, skipHash = false) {
                 </div>
             </div>
             <div>
-                ${ok ? `
+                ${conCufe ? `
                     <div class="card" style="margin-bottom:20px">
                         <div class="card-header"><h3><i class="fas fa-qrcode" style="color:var(--primary);margin-right:6px"></i>Validación DIAN</h3></div>
                         <div class="card-body" style="text-align:center">
@@ -639,7 +683,7 @@ async function feVerTrazas(id) {
 async function feCargarParaImprimir(id) {
     const data = await api(`/facturas/${id}`);
     if (!data || data.error) { toast('No se pudo cargar la factura', 'error'); return null; }
-    if (data.factura.estado !== 'autorizada') { toast('Solo se imprimen facturas autorizadas', 'warning'); return null; }
+    if (!['autorizada', 'anulada'].includes(data.factura.estado)) { toast('Solo se imprimen facturas autorizadas', 'warning'); return null; }
     return data;
 }
 
@@ -671,8 +715,10 @@ async function feImprimirCarta(id) {
     const resol = feTextoResolucion(e);
     const fecha = (f.fecha_emision || '').replace('T', ' ').substring(0, 19);
 
+    const ncA = (f.notas_credito || []).find(n => n.estado === 'autorizada');
     const html = `
         <div class="page">
+            ${f.estado === 'anulada' ? `<div class="sello-anulada">ANULADA</div><div class="anulada-nota">Anulada con Nota Crédito ${feEsc(ncA ? (ncA.prefijo || '') + (ncA.numero || '') : '')} · ${feEsc(ncA?.motivo || '')}</div>` : ''}
             <header>
                 <div class="emp">
                     ${e.empresa_logo_url ? `<img src="${feEsc(e.empresa_logo_url)}" class="logo">` : ''}
@@ -792,6 +838,9 @@ async function feImprimirCarta(id) {
         .sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin:38px 20px 0;text-align:center;font-size:10px;color:#555}
         .sign span{display:block;border-top:1px solid #999;margin-bottom:4px}
         footer{margin-top:18px;padding-top:8px;border-top:1px solid #ddd;text-align:center;font-size:9px;color:#555;line-height:1.5}
+        .page{position:relative}
+        .sello-anulada{position:absolute;top:300px;left:50%;transform:translateX(-50%) rotate(-24deg);font-size:110px;font-weight:900;color:rgba(220,38,38,.16);border:10px solid rgba(220,38,38,.16);padding:0 30px;border-radius:20px;letter-spacing:10px;pointer-events:none;z-index:5}
+        .anulada-nota{background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:8px;padding:6px 12px;margin-bottom:12px;font-weight:700;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}
         @media print{@page{size:letter;margin:10mm}.page{padding:0}}`;
 
     feAbrirVentana(`FE_${feNumero(f)}`, html, css);
@@ -808,6 +857,7 @@ async function feImprimirTicket(id) {
 
     const html = `
         <div class="t">
+            ${f.estado === 'anulada' ? '<div class="c b big">*** FACTURA ANULADA ***</div><hr>' : ''}
             <div class="c b">REPRESENTACIÓN GRÁFICA DE<br>FACTURA ELECTRÓNICA DE VENTA</div>
             <hr>
             ${e.empresa_logo_url ? `<div class="c"><img src="${feEsc(e.empresa_logo_url)}" class="logo"></div>` : ''}
@@ -1124,5 +1174,77 @@ function feProductoFieldsValues() {
     return {
         iva: parseFloat(document.getElementById('m-prod-iva').value) || 0,
         unit_measure_id: parseInt(document.getElementById('m-prod-unidad').value) || 70,
+    };
+}
+
+// ========================================
+// ANULAR CON NOTA CRÉDITO
+// ========================================
+async function feAnular(id) {
+    const data = await api(`/facturas/${id}`);
+    if (!data || data.error) return;
+    const f = data.factura;
+
+    openModal('Emitir Nota Crédito', `
+        <div class="fe-nc-sub"><i class="fas fa-file-circle-minus"></i> Factura <b>${feEsc(feNumero(f))}</b> — ${feEsc(f.cliente_nombre)} — <b>${feMoney(f.total)}</b></div>
+        <div class="fe-box-title" style="margin-top:16px">Concepto DIAN *</div>
+        <div class="fe-nc-conceptos">
+            ${FE.CONCEPTOS_NC.map(([v, t, d, on]) => `
+                <label class="fe-nc-concepto ${on ? 'on' : 'off'}">
+                    <input type="radio" name="fe-nc-concepto" value="${v}" ${v === 2 ? 'checked' : ''} ${on ? '' : 'disabled'}>
+                    <div><strong>${v}. ${t}</strong><span>${d}</span></div>
+                </label>`).join('')}
+        </div>
+        <div class="form-group" style="margin-top:16px">
+            <label>Motivo / descripción *</label>
+            <textarea id="fe-nc-motivo" rows="3" maxlength="250" style="padding-left:14px" placeholder="Ej: Anulación de la factura por error en los datos"></textarea>
+        </div>
+        <div class="fe-alert warning" style="margin:0">
+            <i class="fas fa-triangle-exclamation"></i> <b>Importante:</b> una vez enviada a la DIAN, la Nota Crédito queda registrada permanentemente.
+            La factura original quedará marcada como <b>Anulada</b> y el pedido se podrá volver a facturar.
+        </div>
+    `, `
+        <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+        <button class="btn fe-btn-nc" id="fe-nc-enviar"><i class="fas fa-paper-plane"></i> Emitir Nota Crédito</button>
+    `);
+    document.getElementById('modal-container').classList.add('modal-nc');
+
+    document.getElementById('fe-nc-enviar').onclick = async () => {
+        const motivo = document.getElementById('fe-nc-motivo').value.trim();
+        if (motivo.length < 5) { toast('Escribe el motivo de la anulación', 'warning'); document.getElementById('fe-nc-motivo').focus(); return; }
+        if (!confirm(`¿Anular la factura ${feNumero(f)} por ${feMoney(f.total)} ante la DIAN? Esta acción no se puede deshacer.`)) return;
+
+        document.getElementById('modal-body').innerHTML = `
+            <div class="fe-sending">
+                <div class="fe-sending-icon" style="background:var(--gradient-warm)"><i class="fas fa-file-circle-minus"></i></div>
+                <h3>Enviando Nota Crédito a la DIAN...</h3>
+                <p>Firmando y validando el documento. No cierres esta ventana.</p>
+            </div>`;
+        document.getElementById('modal-footer').innerHTML = '';
+
+        const r = await api(`/facturas/${id}/anular`, { method: 'POST', body: JSON.stringify({ motivo }) });
+        if (r && !r.error) {
+            const n = r.nota || {};
+            document.getElementById('modal-body').innerHTML = `
+                <div class="fe-result ok">
+                    <div class="fe-result-icon"><i class="fas fa-check"></i></div>
+                    <h3>Factura anulada</h3>
+                    <div class="fe-result-num">${feEsc((n.prefijo || '') + (n.numero || ''))}</div>
+                    <p>Nota Crédito autorizada por la DIAN · ${feMoney(n.total)}</p>
+                    <div class="fe-cufe">${feEsc(n.cufe || '')}</div>
+                </div>`;
+            document.getElementById('modal-footer').innerHTML = `<button class="btn btn-primary" onclick="closeModal();viewFactura(${id})">Ver factura</button>`;
+            toast(r.mensaje || 'Factura anulada');
+        } else {
+            const errores = r?.errores?.length ? r.errores : [];
+            document.getElementById('modal-body').innerHTML = `
+                <div class="fe-result bad">
+                    <div class="fe-result-icon"><i class="fas fa-xmark"></i></div>
+                    <h3>No se pudo anular</h3>
+                    <p>${feEsc(r?.mensaje || 'Error desconocido')}</p>
+                </div>
+                ${errores.length ? `<div class="fe-alert danger"><ul>${errores.map(e => `<li>${feEsc(e)}</li>`).join('')}</ul></div>` : ''}`;
+            document.getElementById('modal-footer').innerHTML = `<button class="btn btn-outline" onclick="closeModal();viewFactura(${id})">Cerrar</button>`;
+        }
     };
 }

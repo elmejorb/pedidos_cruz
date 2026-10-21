@@ -35,6 +35,11 @@ class Factura extends Model
         return $this->hasMany(FacturaDetalle::class, 'id_factura', 'id_factura');
     }
 
+    public function notasCredito()
+    {
+        return $this->hasMany(NotaCredito::class, 'id_factura', 'id_factura');
+    }
+
     public function usuario()
     {
         return $this->belongsTo(Usuario::class, 'id_usuario', 'id_usuario');

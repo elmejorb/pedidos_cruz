@@ -87,6 +87,7 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     $router->get('/facturas/{id}/trazas', 'FacturaController@trazas');
     $router->post('/facturas/{id}/reenviar', 'FacturaController@reenviar');
     $router->post('/facturas/{id}/email', 'FacturaController@email');
+    $router->post('/facturas/{id}/anular', 'FacturaController@anular');
     $router->delete('/facturas/{id}', 'FacturaController@destroy');
     $router->get('/config-fe', 'FacturaController@config');
     $router->put('/config-fe', 'FacturaController@guardarConfig');

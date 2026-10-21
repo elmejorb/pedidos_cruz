@@ -53,7 +53,9 @@ class FacturaController extends Controller
     {
         if ($r = $this->soloAdmin($request)) return $r;
 
-        $factura = Factura::with(['detalles', 'pedido:id_pedido,numero_pedido,id_ruta,id_vendedor', 'pedido.vendedor:id_usuario,nombre', 'usuario:id_usuario,nombre'])->find($id);
+        $rel = ['detalles', 'pedido:id_pedido,numero_pedido,id_ruta,id_vendedor', 'pedido.vendedor:id_usuario,nombre', 'usuario:id_usuario,nombre'];
+        if (\Illuminate\Support\Facades\Schema::hasTable('pc_notas_credito')) $rel[] = 'notasCredito.usuario:id_usuario,nombre';
+        $factura = Factura::with($rel)->find($id);
         if (!$factura) return response()->json(['error' => true, 'mensaje' => 'Factura no encontrada'], 404);
 
         return response()->json([
@@ -150,6 +152,23 @@ class FacturaController extends Controller
         $factura->detalles()->delete();
         $factura->delete();
         return response()->json(['error' => false, 'mensaje' => 'Intento eliminado']);
+    }
+
+    /** Anular factura autorizada con nota crédito (concepto 2) */
+    public function anular(Request $request, $id)
+    {
+        if ($r = $this->soloAdmin($request)) return $r;
+        $this->validate($request, ['motivo' => 'required|string|min:5|max:500']);
+        $factura = Factura::find($id);
+        if (!$factura) return response()->json(['error' => true, 'mensaje' => 'Factura no encontrada'], 404);
+
+        $res = (new FacturacionElectronicaService())->anular($factura, trim($request->motivo), $request->usuario->id_usuario);
+        return response()->json([
+            'error' => !$res['ok'],
+            'mensaje' => $res['mensaje'],
+            'errores' => $res['errores'] ?? [],
+            'nota' => $res['nota'] ?? null,
+        ], $res['ok'] ? 200 : ($res['http'] ?? 422));
     }
 
     public function email(Request $request, $id)

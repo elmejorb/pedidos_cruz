@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ConfigFe;
 use App\Models\Factura;
 use App\Models\FacturaDetalle;
+use App\Models\NotaCredito;
 use App\Models\Pedido;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -457,6 +458,121 @@ class FacturacionElectronicaService
     }
 
     // ==================================================================
+    // NOTA CRÉDITO: ANULACIÓN (concepto 2, Lista 34 DIAN)
+    // Se reenvía el MISMO JSON de la factura original + billing_reference + credit_note,
+    // igual que el facturador Conta (enviar.php, case 'nota_credito').
+    // ==================================================================
+    public function anular(Factura $factura, string $motivo, int $idUsuario): array
+    {
+        if ($factura->estado !== 'autorizada' || !$factura->cufe) {
+            return ['ok' => false, 'http' => 409, 'mensaje' => 'Solo se pueden anular facturas autorizadas por la DIAN'];
+        }
+        $original = json_decode($factura->request_json ?? '', true);
+        if (!is_array($original) || empty($original['invoice_lines'])) {
+            return ['ok' => false, 'http' => 422, 'mensaje' => 'No se encontró el JSON original de la factura para armar la nota crédito'];
+        }
+
+        // Bloqueo contra doble anulación
+        $nota = DB::transaction(function () use ($factura, $motivo, $idUsuario) {
+            Factura::where('id_factura', $factura->id_factura)->lockForUpdate()->first();
+            $enCurso = NotaCredito::where('id_factura', $factura->id_factura)
+                ->where(fn($q) => $q->where('estado', 'autorizada')
+                    ->orWhere(fn($w) => $w->where('estado', 'pendiente')->where('updated_at', '>', Carbon::now()->subMinutes(3))))
+                ->exists();
+            if ($enCurso) return null;
+            return NotaCredito::create([
+                'id_factura' => $factura->id_factura,
+                'estado' => 'pendiente',
+                'concepto' => 2,
+                'motivo' => mb_substr($motivo, 0, 500),
+                'total' => $factura->total,
+                'id_usuario' => $idUsuario,
+            ]);
+        });
+        if (!$nota) {
+            return ['ok' => false, 'http' => 409, 'mensaje' => 'La factura ya tiene una nota crédito autorizada o en proceso'];
+        }
+
+        $login = $this->login();
+        if (!$login['ok']) {
+            $nota->update(['estado' => 'error', 'mensaje_dian' => $login['mensaje']]);
+            return ['ok' => false, 'http' => 502, 'mensaje' => $login['mensaje']];
+        }
+
+        $payload = $original;
+        unset($payload['note'], $payload['send_email'], $payload['customer_email'], $payload['withholding_taxes']);
+        $payload['company_id'] = $login['company_id'];
+        $payload['billing_reference'] = [
+            'number' => ($factura->prefijo ?? '') . $factura->numero,
+            'uuid' => $factura->cufe,
+            'scheme_name' => 'CUFE-SHA384',
+            'issue_date' => substr((string) $factura->fecha_emision, 0, 10),
+        ];
+        $payload['credit_note'] = [
+            'reason' => 'Anulación de factura electrónica',
+            'correction_concept_id' => '2',
+            'description' => mb_substr($motivo, 0, 250),
+        ];
+
+        $nota->request_json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $nota->save();
+
+        $res = $this->http('POST', '/api/notas/credito/enviar', $payload, $login['token'], 90);
+        $body = $res['body'] ?? [];
+        $nota->response_json = json_encode($body ?: ['raw' => $res['raw'] ?? null, 'http' => $res['http']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $nota->status_code = $body['status_code'] ?? null;
+
+        // La API de NC no envía "success": se aprueba por CUFE + status 00
+        $aprobada = !empty($body['cufe']) && is_string($body['cufe']) && (($body['status_code'] ?? '00') === '00');
+
+        if ($aprobada) {
+            $dian = $body['response_dian']['Envelope']['Body']['SendBillSyncResponse']['SendBillSyncResult'] ?? [];
+            $mensajeDian = is_string($dian['StatusMessage'] ?? null) ? $dian['StatusMessage'] : ($body['message'] ?? 'Nota crédito autorizada');
+            // El número real viene en el mensaje DIAN ("La Nota Crédito NC12, ha sido autorizada.")
+            $prefijo = $body['prefix'] ?? null;
+            $numero = null;
+            if ($prefijo && preg_match('/\b' . preg_quote($prefijo, '/') . '(\d+)\b/', $mensajeDian, $m)) $numero = $m[1];
+            if (!$numero) $numero = (string) ($body['consecutive'] ?? '');
+
+            $nota->fill([
+                'estado' => 'autorizada',
+                'prefijo' => $prefijo,
+                'numero' => $numero,
+                'cufe' => $body['cufe'],
+                'fecha_emision' => Carbon::now(),
+                'mensaje_dian' => mb_substr($mensajeDian, 0, 500),
+                'errores' => null,
+            ])->save();
+            $factura->update(['estado' => 'anulada']);
+
+            return [
+                'ok' => true, 'http' => 200,
+                'mensaje' => "Factura {$factura->prefijo}{$factura->numero} anulada con la nota crédito {$prefijo}{$numero}",
+                'nota' => $nota->fresh(),
+            ];
+        }
+
+        $errores = self::extraerErrores($body, $res);
+        $mensaje = $body['error'] ?? $body['message'] ?? ($res['error'] ?? "Respuesta inválida de la API (HTTP {$res['http']})");
+        if (is_string($mensaje) && stripos($mensaje, 'resolución activa') !== false) {
+            $mensaje .= '. Falta configurar en la API una resolución activa de Nota Crédito para esta empresa.';
+        }
+        $nota->fill([
+            'estado' => isset($body['respuesta_dian']) || isset($body['status_code']) ? 'rechazada' : 'error',
+            'mensaje_dian' => mb_substr(is_string($mensaje) ? $mensaje : json_encode($mensaje), 0, 500),
+            'errores' => $errores,
+        ])->save();
+        Log::warning('NC rechazada', ['id_factura' => $factura->id_factura, 'errores' => $errores]);
+
+        return [
+            'ok' => false, 'http' => 422,
+            'mensaje' => $nota->mensaje_dian,
+            'errores' => array_map(fn($e) => trim(($e['code'] ?? '') . ' ' . ($e['message'] ?? '')), $errores),
+            'nota' => $nota->fresh(),
+        ];
+    }
+
+    // ==================================================================
     // OTRAS ACCIONES
     // ==================================================================
 
@@ -558,6 +674,19 @@ class FacturacionElectronicaService
         if (!$body) {
             return [['code' => 'HTTP' . $res['http'], 'message' => $res['error'] ?? ('Respuesta no válida: ' . ($res['raw'] ?? ''))]];
         }
+        $soap = $body['respuesta_dian']['Envelope']['Body']['SendBillSyncResponse']['SendBillSyncResult']
+            ?? $body['response_dian']['Envelope']['Body']['SendBillSyncResponse']['SendBillSyncResult'] ?? null;
+        $msgs = $soap['ErrorMessage']['string'] ?? null;
+        if ($msgs && empty($body['errors'])) {
+            $out = [];
+            foreach ((array) $msgs as $m) {
+                if (!is_string($m)) continue;
+                $code = preg_match('/Regla:\s*([A-Z0-9]+)/', $m, $mm) ? $mm[1] : '';
+                $out[] = ['code' => $code, 'message' => trim(preg_replace('/^Regla:\s*[A-Z0-9]+,\s*/', '', $m))];
+            }
+            if ($out) return $out;
+        }
+
         $items = $body['errors']['items'] ?? null;
         if (is_array($items) && $items) {
             return array_values(array_map(fn($e) => [
