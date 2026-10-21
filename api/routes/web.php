@@ -72,6 +72,19 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     $router->get('/reportes/ventas', 'PedidoController@reporteVentas');
     $router->get('/reportes/cierre', 'ReporteController@cierre');
 
+    // Catálogos y proveedores
+    $router->get('/catalogos', 'CatalogoAdminController@index');
+    $router->post('/catalogos', 'CatalogoAdminController@store');
+    $router->put('/catalogos-ajustes', 'CatalogoAdminController@ajustes');
+    $router->put('/catalogos/{id}', 'CatalogoAdminController@update');
+    $router->delete('/catalogos/{id}', 'CatalogoAdminController@destroy');
+    $router->get('/catalogos/{id}/productos', 'CatalogoAdminController@productos');
+    $router->put('/catalogos/{id}/productos', 'CatalogoAdminController@guardarProductos');
+    $router->get('/proveedores', 'CatalogoAdminController@proveedores');
+    $router->post('/proveedores', 'CatalogoAdminController@guardarProveedor');
+    $router->put('/proveedores/{id}', 'CatalogoAdminController@guardarProveedor');
+    $router->delete('/proveedores/{id}', 'CatalogoAdminController@eliminarProveedor');
+
     // Créditos y pagos
     $router->get('/cartera', 'PagoController@cartera');
     $router->get('/pagos', 'PagoController@index');

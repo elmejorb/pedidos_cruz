@@ -12,8 +12,18 @@ class Producto extends Model
     protected $fillable = [
         'codigo', 'nombre', 'descripcion', 'id_categoria',
         'precio', 'stock', 'stock_minimo', 'unidades_por_caja', 'foto', 'activo',
-        'iva', 'unit_measure_id'
+        'iva', 'unit_measure_id', 'precio_costo', 'id_proveedor'
     ];
+
+    public function proveedor()
+    {
+        return $this->belongsTo(Proveedor::class, 'id_proveedor', 'id_proveedor');
+    }
+
+    public function catalogos()
+    {
+        return $this->belongsToMany(Catalogo::class, 'pc_catalogo_producto', 'id_producto', 'id_catalogo');
+    }
 
     public function categoria()
     {

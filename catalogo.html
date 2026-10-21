@@ -525,6 +525,9 @@
         let allProductos = [];
         let categorias = [];
         let categoriaActiva = '';
+        // Enlace de catálogo de un vendedor: catalogo.html?c=codigo
+        const CATALOGO = new URLSearchParams(location.search).get('c') || '';
+        const conCatalogo = p => { if (CATALOGO) p.set('c', CATALOGO); return p; };
 
         function formatNumber(n) {
             return parseFloat(n || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -537,7 +540,7 @@
 
         async function cargarCategorias() {
             try {
-                const resp = await fetch(API + '/catalogo/categorias');
+                const resp = await fetch(API + '/catalogo/categorias?' + conCatalogo(new URLSearchParams()).toString());
                 const data = await resp.json();
                 categorias = data.categorias || [];
                 renderCategorias();
@@ -567,8 +570,18 @@
             if (term) params.set('buscar', term);
 
             try {
-                const resp = await fetch(API + '/catalogo?' + params.toString());
+                const resp = await fetch(API + '/catalogo?' + conCatalogo(params).toString());
                 const data = await resp.json();
+                if (data.privado) {
+                    document.getElementById('result-count').textContent = '';
+                    area.innerHTML = `<div class="empty"><i class="fas fa-lock"></i><h3>Catálogo privado</h3><p>${data.mensaje}</p></div>`;
+                    return;
+                }
+                if (data.catalogo) {
+                    document.querySelector('.hero h1').textContent = data.catalogo.nombre;
+                    if (data.catalogo.descripcion) document.querySelector('.hero p').textContent = data.catalogo.descripcion;
+                    document.title = data.catalogo.nombre + ' - Catálogo';
+                }
                 allProductos = data.productos || [];
                 renderProductos();
             } catch (err) {

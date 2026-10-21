@@ -269,6 +269,7 @@ function navigateTo(page, options = {}) {
         'despacho': 'Generar Despacho',
         'facturas': 'Facturas Electrónicas',
         'cartera': 'Cartera y Pagos',
+        'catalogos': 'Catálogos',
         'config-fe': 'Configuración Facturación Electrónica',
     };
 
@@ -300,6 +301,7 @@ function navigateTo(page, options = {}) {
         'despacho': renderDespacho,
         'facturas': renderFacturas,
         'cartera': renderCartera,
+        'catalogos': renderCatalogos,
         'config-fe': renderConfigFE,
     };
 
@@ -1937,6 +1939,8 @@ async function renderProductos() {
             <select class="filter-select" id="filter-categoria">
                 <option value="">Todas las categorías</option>
             </select>
+            <select class="filter-select" id="filter-proveedor"><option value="">Todos los proveedores</option></select>
+            <select class="filter-select" id="filter-catalogo"><option value="">Todos los catálogos</option></select>
             <select class="filter-select" id="filter-iva">
                 ${[['', 'Todos (IVA)'], ['con', 'Con IVA'], ['19', 'IVA 19%'], ['5', 'IVA 5%'], ['0', 'Sin IVA (0%)']]
                     .map(([v, l]) => `<option value="${v}" ${(localStorage.getItem('pc_prod_iva') || '') === v ? 'selected' : ''}>${l}</option>`).join('')}
@@ -1982,6 +1986,12 @@ async function renderProductos() {
         let filtered = allProductos;
         if (term) filtered = filtered.filter(p => p.nombre.toLowerCase().includes(term) || (p.codigo || '').toLowerCase().includes(term));
         if (catFilter) filtered = filtered.filter(p => p.id_categoria == catFilter);
+        const provFilter = document.getElementById('filter-proveedor')?.value || '';
+        if (provFilter === 'sin') filtered = filtered.filter(p => !p.id_proveedor);
+        else if (provFilter) filtered = filtered.filter(p => p.id_proveedor == provFilter);
+        const cataFilter = document.getElementById('filter-catalogo')?.value || '';
+        if (cataFilter === 'sin') filtered = filtered.filter(p => !(p.catalogos || []).length);
+        else if (cataFilter) filtered = filtered.filter(p => (p.catalogos || []).includes(parseInt(cataFilter)));
         const ivaFilter = document.getElementById('filter-iva')?.value || '';
         if (ivaFilter === 'con') filtered = filtered.filter(p => parseFloat(p.iva || 0) > 0);
         else if (ivaFilter !== '') filtered = filtered.filter(p => parseFloat(p.iva || 0) === parseFloat(ivaFilter));
@@ -1990,6 +2000,7 @@ async function renderProductos() {
 
     async function loadProductos() {
         const [prodData, catData] = await Promise.all([api('/productos'), api('/categorias')]);
+        if (typeof catLlenarFiltrosProductos === 'function') catLlenarFiltrosProductos();
         if (prodData) allProductos = prodData.productos || [];
         if (catData) {
             categorias = catData.categorias || [];
@@ -2028,7 +2039,7 @@ async function renderProductos() {
                     ${ivaBadge(p, 'iva-badge-float')}
                 </div>
                 <div class="product-card-body">
-                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">${p.codigo || 'Sin código'} ${p.categoria ? '• ' + p.categoria.nombre : ''}</div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">${p.codigo || 'Sin código'} ${p.categoria ? '• ' + p.categoria.nombre : ''}${p.proveedor ? ' • <i class="fas fa-truck-field"></i> ' + p.proveedor.nombre : ''}</div>
                     <h4>${p.nombre}</h4>
                     <div class="price">$${formatNumber(p.precio)}</div>
                     <div class="stock" style="margin-bottom:8px">Stock: <strong>${p.stock}</strong> ${p.stock <= p.stock_minimo ? '<span style="color:var(--danger)">(Bajo)</span>' : ''}</div>
@@ -2114,6 +2125,9 @@ async function renderProductos() {
         renderProductView(getFilteredProducts());
     });
 
+    ['filter-proveedor', 'filter-catalogo'].forEach(id => document.getElementById(id).addEventListener('change', () => renderProductView(getFilteredProducts())));
+    window._recargarProductos = loadProductos;
+
     document.getElementById('filter-iva').addEventListener('change', function () {
         localStorage.setItem('pc_prod_iva', this.value);
         renderProductView(getFilteredProducts());
@@ -2181,74 +2195,7 @@ async function renderProductos() {
     loadProductos();
 }
 
-function openProductModal(callback, editData = null, categorias = []) {
-    const isEdit = !!editData;
-
-    // If no categorias passed, fetch them
-    if (categorias.length === 0) {
-        api('/categorias').then(data => {
-            if (data) openProductModal(callback, editData, data.categorias || []);
-        });
-        return;
-    }
-
-    openModal(isEdit ? 'Editar Producto' : 'Nuevo Producto', `
-        <div class="grid-2">
-            <div class="form-group"><label>Código</label><input type="text" id="m-prod-codigo" value="${editData?.codigo || ''}"></div>
-            <div class="form-group"><label>Categoría</label>
-                <select id="m-prod-cat" style="padding:12px 14px;border:2px solid var(--border);border-radius:var(--radius);width:100%;font-family:var(--font)">
-                    <option value="">Sin categoría</option>
-                    ${categorias.map(c => `<option value="${c.id_categoria}" ${editData?.id_categoria == c.id_categoria ? 'selected' : ''}>${c.nombre}</option>`).join('')}
-                </select>
-            </div>
-        </div>
-        <div class="form-group"><label>Nombre *</label><input type="text" id="m-prod-nombre" value="${editData?.nombre || ''}"></div>
-        <div class="form-group"><label>Descripción</label><textarea id="m-prod-desc" style="padding-left:14px">${editData?.descripcion || ''}</textarea></div>
-        <div class="grid-2">
-            <div class="form-group"><label>Precio *</label><input type="number" step="0.01" id="m-prod-precio" value="${editData?.precio || ''}"></div>
-            <div class="form-group"><label>Stock</label><input type="number" id="m-prod-stock" value="${editData?.stock ?? 0}"></div>
-        </div>
-        <div class="grid-2">
-            <div class="form-group"><label>Stock Mínimo</label><input type="number" id="m-prod-stockmin" value="${editData?.stock_minimo ?? 5}"></div>
-            <div class="form-group">
-                <label>Unidades por Caja</label>
-                <input type="number" id="m-prod-upc" min="1" value="${editData?.unidades_por_caja ?? 1}" title="Cuántas unidades contiene una caja. Usar 1 si no se vende por caja.">
-            </div>
-        </div>
-        ${feProductoFieldsHTML(editData)}
-    `, `
-        <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
-        <button class="btn btn-primary" id="m-prod-save">${isEdit ? 'Actualizar' : 'Guardar'}</button>
-    `);
-
-    document.getElementById('m-prod-save').onclick = async () => {
-        const body = {
-            codigo: document.getElementById('m-prod-codigo').value,
-            nombre: document.getElementById('m-prod-nombre').value,
-            descripcion: document.getElementById('m-prod-desc').value,
-            id_categoria: document.getElementById('m-prod-cat').value || null,
-            precio: parseFloat(document.getElementById('m-prod-precio').value),
-            stock: parseInt(document.getElementById('m-prod-stock').value) || 0,
-            stock_minimo: parseInt(document.getElementById('m-prod-stockmin').value) || 5,
-            unidades_por_caja: parseInt(document.getElementById('m-prod-upc').value) || 1,
-            ...feProductoFieldsValues(),
-        };
-
-        if (!body.nombre || !body.precio) { toast('Nombre y precio son requeridos', 'warning'); return; }
-
-        const url = isEdit ? `/productos/${editData.id_producto}` : '/productos';
-        const method = isEdit ? 'PUT' : 'POST';
-
-        const data = await api(url, { method, body: JSON.stringify(body) });
-        if (data && !data.error) {
-            toast(isEdit ? 'Producto actualizado' : 'Producto creado');
-            closeModal();
-            if (callback) callback();
-        } else {
-            toast(data?.mensaje || 'Error', 'error');
-        }
-    };
-}
+// openProductModal() está en js/catalogos.js (modal con proveedor, costo y catálogos)
 
 // ========================================
 // REPORTES
@@ -3493,7 +3440,7 @@ function handleHashRoute() {
         return true;
     }
 
-    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho', 'facturas', 'config-fe', 'cartera'];
+    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho', 'facturas', 'config-fe', 'cartera', 'catalogos'];
     if (validPages.includes(page)) {
         navigateTo(page, { skipHash: true });
         return true;
