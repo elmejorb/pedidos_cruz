@@ -12,6 +12,60 @@ const ALCANCES = { todo: 'Todo el inventario', catalogo: 'Catálogo', categoria:
 
 try { CONT.ciego = localStorage.getItem('pc_conteo_ciego') === '1'; } catch (e) { }
 
+// Por conteo se guarda en el dispositivo: filtro, búsqueda, último producto y los conteos aún no
+// confirmados por el servidor (borrador). Así un refresco o una caída de señal no pierden nada.
+function contLS(clave, valor) {
+    const k = `pc_conteo_${CONT.conteo?.id_conteo}_${clave}`;
+    try {
+        if (valor === undefined) return JSON.parse(localStorage.getItem(k) || 'null');
+        if (valor === null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(valor));
+    } catch (e) { return null; }
+}
+const contBorrador = () => contLS('borrador') || {};
+function contSetBorrador(id, contado) {
+    const b = contBorrador();
+    if (contado === undefined) delete b[id]; else b[id] = contado;
+    contLS('borrador', Object.keys(b).length ? b : null);
+}
+function contGuardarVista() {
+    // La búsqueda de un escaneo es momentánea: solo se recuerda la que se escribe a mano
+    if (CONT.conteo?.estado === 'abierto') contLS('vista', { filtro: CONT.filtro, buscar: CONT.escaneo ? '' : CONT.buscar, ultimo: CONT.ultimo || null });
+}
+
+CONT.enVuelo = 0;
+function contSync() {
+    const el = document.getElementById('cont-sync');
+    if (!el) return;
+    const pend = Object.keys(contBorrador()).length;
+    if (CONT.enVuelo > 0) el.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+    else if (pend) el.innerHTML = `<i class="fas fa-cloud-arrow-up"></i> ${pend} sin enviar${navigator.onLine ? '' : ' (sin conexión)'}`;
+    else el.innerHTML = '<i class="fas fa-cloud"></i> Todo guardado';
+    el.className = 'cont-sync ' + (CONT.enVuelo ? 'saving' : pend ? 'pend' : 'ok');
+}
+
+/** Reenvía al servidor lo que quedó en el borrador (refresco, señal caída, error) */
+async function contEnviarBorrador() {
+    if (!CONT.conteo || CONT.conteo.estado !== 'abierto' || CONT.reenviando) return;
+    const b = contBorrador();
+    const ids = Object.keys(b);
+    if (!ids.length) return;
+    CONT.reenviando = true;
+    let ok = 0;
+    for (const id of ids) {
+        const r = await contEnviar(parseInt(id), b[id]);
+        if (!r) break; // sigue sin señal: se reintenta luego
+        ok++;
+    }
+    CONT.reenviando = false;
+    if (ok) { contRenderStats(); contRenderLista(); toast(`${ok} conteo(s) pendiente(s) se guardaron`, 'success'); }
+    contSync();
+}
+window.addEventListener('online', () => contEnviarBorrador());
+setInterval(() => { if (document.getElementById('cont-sync')) contEnviarBorrador(); }, 20000);
+window.addEventListener('beforeunload', e => {
+    if (CONT.enVuelo > 0 && document.getElementById('cont-sync')) { e.preventDefault(); e.returnValue = ''; }
+});
+
 // ========================================
 // LISTADO DE CONTEOS
 // ========================================
@@ -164,9 +218,22 @@ async function contAbrir(id, skipHash = false) {
     CONT.conteo = data.conteo;
     CONT.productos = data.productos || [];
     CONT.buscar = '';
+    CONT.ultimo = null;
     const abierto = CONT.conteo.estado === 'abierto';
     CONT.filtro = abierto ? 'pendientes' : 'diferencias';
     if (!abierto && !CONT.productos.some(p => p.diferencia)) CONT.filtro = 'todos';
+    const vista = abierto ? contLS('vista') : null;
+    if (vista) Object.assign(CONT, { filtro: vista.filtro || CONT.filtro, buscar: vista.buscar || '', ultimo: vista.ultimo || null });
+    if (!abierto) { contLS('vista', null); contLS('borrador', null); }
+    // Lo que quedó sin enviar se muestra ya (y se reenvía abajo)
+    const borr = abierto ? contBorrador() : {};
+    CONT.productos.forEach(p => {
+        if (!(p.id_producto in borr)) return;
+        const v = borr[p.id_producto];
+        p.contado = v;
+        p.diferencia = v === null ? null : v - (p.stock_sistema ?? p.stock);
+        if (v !== null && p.stock_sistema === null) p.stock_sistema = p.stock;
+    });
 
     const c = CONT.conteo;
     container.innerHTML = `
@@ -174,7 +241,7 @@ async function contAbrir(id, skipHash = false) {
             <div class="cont-head">
                 <button class="btn btn-ghost btn-sm" onclick="contVolver()"><i class="fas fa-arrow-left"></i> Conteos</button>
                 <div class="cont-head-info">
-                    <h2>${contEsc(c.nombre)} <span class="cont-estado ${c.estado}">${{ abierto: 'En curso', aplicado: 'Aplicado', cancelado: 'Cancelado' }[c.estado]}</span></h2>
+                    <h2>${contEsc(c.nombre)} <span class="cont-estado ${c.estado}">${{ abierto: 'En curso', aplicado: 'Aplicado', cancelado: 'Cancelado' }[c.estado]}</span>${abierto ? '<span id="cont-sync" class="cont-sync"></span>' : ''}</h2>
                     <span>${contAlcanceTxt(c)}${c.notas ? ' · ' + contEsc(c.notas) : ''}${c.aplicado_at ? ' · Aplicado ' + formatDate(c.aplicado_at) : ''}</span>
                 </div>
                 <div class="cont-head-actions">
@@ -208,9 +275,10 @@ async function contAbrir(id, skipHash = false) {
     // Timer propio: el Enter del lector de código de barras llega antes de los 200 ms y debe cancelar
     // el re-dibujo pendiente (si no, borraría el foco del producto escaneado)
     let tBuscar = null;
+    buscar.value = CONT.buscar;
     buscar.oninput = () => {
         clearTimeout(tBuscar);
-        tBuscar = setTimeout(() => { CONT.buscar = buscar.value.trim().toLowerCase(); contRenderLista(); }, 200);
+        tBuscar = setTimeout(() => { CONT.escaneo = false; CONT.buscar = buscar.value.trim().toLowerCase(); contGuardarVista(); contRenderLista(); }, 200);
     };
     buscar.onkeydown = e => {
         if (e.key !== 'Enter' || !abierto) return;
@@ -223,8 +291,11 @@ async function contAbrir(id, skipHash = false) {
         if (!p) { const l = contFiltrados(true); if (l.length === 1) p = l[0]; }
         if (!p) return toast('Hay varios productos con esa búsqueda; escoge uno de la lista', 'warning');
         CONT.buscar = (p.codigo || p.nombre).toLowerCase();
+        CONT.escaneo = true;
         buscar.value = p.codigo || p.nombre;
         if (!contFiltrados().some(x => x.id_producto === p.id_producto)) CONT.filtro = 'todos';
+        contGuardarVista();
+        contRenderStats();
         contRenderLista();
         contEnfocar(p.id_producto);
     };
@@ -237,7 +308,14 @@ async function contAbrir(id, skipHash = false) {
 
     contRenderStats();
     contRenderLista();
-    if (abierto && window.innerWidth > 768) buscar.focus();
+    if (abierto) {
+        contSync();
+        // Volver al último producto contado (si sigue visible con el filtro actual)
+        const fila = CONT.ultimo && document.querySelector(`.cont-fila[data-id="${CONT.ultimo}"]`);
+        if (fila) fila.scrollIntoView({ block: 'center' });
+        else if (window.innerWidth > 768) buscar.focus();
+        contEnviarBorrador();
+    }
 }
 
 function contVolver() {
@@ -266,6 +344,7 @@ function contRenderStats() {
         ${abierto ? `<div class="cont-progreso-big">
             <div class="cont-progress"><div style="width:${pct}%"></div></div>
             <span><b>${contNum(r.contados)}</b> de ${contNum(r.total)} productos contados · ${pct}%</span>
+            <span class="cont-nota"><i class="fas fa-shield-halved"></i> El inventario no cambia hasta que presiones "Aplicar ajustes"</span>
         </div>` : ''}
         <div class="stats-grid cont-stats">
             ${abierto ? `<div class="stat-card blue"><div class="stat-icon blue"><i class="fas fa-hourglass-half"></i></div>
@@ -286,7 +365,7 @@ function contRenderStats() {
             ? [['pendientes', 'Pendientes', r.pendientes], ['contados', 'Contados', r.contados], ['diferencias', 'Con diferencia', r.dif], ['todos', 'Todos', r.total]]
             : [['diferencias', 'Con diferencia', r.dif], ['todos', 'Todos', r.total]];
         chips.innerHTML = ops.map(([k, l, n]) => `<button class="fe-chip-filter ${CONT.filtro === k ? 'active' : ''}" data-f="${k}">${l} <span class="cont-chip-n">${contNum(n)}</span></button>`).join('');
-        chips.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { CONT.filtro = b.dataset.f; contRenderStats(); contRenderLista(); });
+        chips.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { CONT.filtro = b.dataset.f; contGuardarVista(); contRenderStats(); contRenderLista(); });
     }
 }
 
@@ -376,7 +455,13 @@ function contConectarFilas(el) {
         const inputs = [...fila.querySelectorAll('.cont-in')];
         inputs.forEach((inp, i) => {
             inp.onfocus = () => inp.select();
-            inp.onchange = () => contGuardar(id, fila);
+            inp.oninput = () => {
+                contSetBorrador(id, contLeerFila(id, fila)); // cada tecla queda en el dispositivo
+                contSync();
+                clearTimeout(fila._t);
+                fila._t = setTimeout(() => contGuardar(id, fila), 900);
+            };
+            inp.onchange = () => { clearTimeout(fila._t); contGuardar(id, fila); };
             inp.onkeydown = e => {
                 if (e.key !== 'Enter') return;
                 e.preventDefault();
@@ -396,30 +481,33 @@ function contEnfocar(id) {
     if (inp) { inp.scrollIntoView({ block: 'center', behavior: 'smooth' }); setTimeout(() => inp.focus(), 150); }
 }
 
+/** Total en unidades de lo escrito en la fila (null = casillas vacías) */
+function contLeerFila(id, fila) {
+    const p = CONT.productos.find(x => x.id_producto === id);
+    const upc = p && parseInt(p.unidades_por_caja) > 1 ? parseInt(p.unidades_por_caja) : 0;
+    const val = k => fila.querySelector(`.cont-in[data-k="${k}"]`)?.value.trim() ?? '';
+    const cajas = val('cajas'), unid = val('unid');
+    if (cajas === '' && unid === '') return null;
+    return Math.max(0, (parseInt(cajas) || 0) * (upc || 1) + (parseInt(unid) || 0));
+}
+
 async function contGuardar(id, fila, quitar = false) {
     const p = CONT.productos.find(x => x.id_producto === id);
     if (!p) return;
-    const upc = parseInt(p.unidades_por_caja) > 1 ? parseInt(p.unidades_por_caja) : 0;
-    const val = k => fila.querySelector(`.cont-in[data-k="${k}"]`)?.value.trim() ?? '';
-    const cajas = val('cajas'), unid = val('unid');
-    let contado = null;
-    if (!quitar && (cajas !== '' || unid !== '')) {
-        contado = (parseInt(cajas) || 0) * (upc || 1) + (parseInt(unid) || 0);
-        if (contado < 0) return toast('La cantidad no puede ser negativa', 'warning');
-    }
-    if (contado === p.contado && !quitar) return;
+    const contado = quitar ? null : contLeerFila(id, fila);
+    if (contado === p.contado && !quitar && !(id in contBorrador())) return;
+    if (quitar) fila.querySelectorAll('.cont-in').forEach(i => i.value = '');
 
+    // 1) Primero queda en el dispositivo; 2) luego se envía. Si falla, el borrador se reenvía después.
+    contSetBorrador(id, contado);
+    CONT.ultimo = id;
+    contGuardarVista();
+    Object.assign(p, { contado, diferencia: contado === null ? null : contado - (p.stock_sistema ?? p.stock) });
     fila.classList.add('guardando');
-    const r = await api(`/conteos/${CONT.conteo.id_conteo}/item`, { method: 'PUT', body: JSON.stringify({ id_producto: id, contado }) });
+    const ok = await contEnviar(id, contado);
     fila.classList.remove('guardando');
-    if (!r || r.error) return toast(r?.mensaje || 'No se pudo guardar el conteo', 'error');
-
-    if (r.item) {
-        Object.assign(p, { contado: r.item.contado, stock_sistema: r.item.stock_sistema, diferencia: r.item.diferencia, stock: r.item.stock_sistema });
-    } else {
-        Object.assign(p, { contado: null, stock_sistema: null, diferencia: null });
-        fila.querySelectorAll('.cont-in').forEach(i => i.value = '');
-    }
+    fila.classList.toggle('sin-enviar', !ok);
+    if (!ok) toast('Sin conexión: el conteo quedó guardado en este dispositivo y se enviará solo', 'warning', 2500);
     // Se actualiza solo la fila (no se re-dibuja la lista, para no perder el foco del siguiente producto)
     fila.classList.toggle('contado', p.contado !== null);
     fila.classList.toggle('dif', !!p.diferencia);
@@ -432,10 +520,41 @@ async function contGuardar(id, fila, quitar = false) {
     contRenderStats();
 }
 
+/** Envía un conteo al servidor (en orden por producto). true = confirmado o rechazado de forma definitiva */
+async function contEnviar(id, contado) {
+    CONT.colas = CONT.colas || {};
+    const anterior = CONT.colas[id] || Promise.resolve();
+    const tarea = anterior.then(async () => {
+        CONT.enVuelo++; contSync();
+        try {
+            const r = await api(`/conteos/${CONT.conteo.id_conteo}/item`, { method: 'PUT', body: JSON.stringify({ id_producto: id, contado }) });
+            if (!r || r.offline) return false;                       // sin señal: queda en borrador
+            const b = contBorrador();
+            if (b[id] === contado) contSetBorrador(id, undefined);   // solo si no hay un valor más nuevo
+            if (r.error || !('item' in r)) { toast(r.mensaje || 'No se pudo guardar el conteo: revisa la cantidad', 'error'); return true; }
+            const p = CONT.productos.find(x => x.id_producto === id);
+            if (p && contBorrador()[id] === undefined) {
+                if (r.item) Object.assign(p, { contado: r.item.contado, stock_sistema: r.item.stock_sistema, diferencia: r.item.diferencia, stock: r.item.stock_sistema });
+                else Object.assign(p, { contado: null, stock_sistema: null, diferencia: null });
+            }
+            return true;
+        } catch (e) {
+            return false;
+        } finally {
+            CONT.enVuelo--; contSync();
+        }
+    });
+    CONT.colas[id] = tarea.catch(() => { });
+    return tarea;
+}
+
 // ========================================
 // APLICAR / CANCELAR
 // ========================================
 async function contAplicar() {
+    await contEnviarBorrador();
+    const pend = Object.keys(contBorrador()).length;
+    if (pend || CONT.enVuelo) return toast(`Hay ${pend || 'conteos'} sin enviar al servidor. Revisa la conexión e inténtalo de nuevo.`, 'warning');
     const r = contResumen();
     if (!r.contados) return toast('Todavía no has contado ningún producto', 'warning');
 
@@ -474,6 +593,7 @@ async function contAplicar() {
             return toast(res?.mensaje || 'No se pudo aplicar', 'error');
         }
         closeModal();
+        contLS('vista', null);
         toast(res.mensaje || 'Inventario ajustado');
         contAbrir(CONT.conteo.id_conteo, true);
     };
