@@ -1751,18 +1751,6 @@ body {
 .wiz-cat-chip { border: 2px solid var(--border); background: var(--surface); border-radius: 18px; padding: 6px 13px; font-family: var(--font); font-size: 13px; font-weight: 700; color: var(--text-secondary); cursor: pointer; transition: all .15s; }
 .wiz-cat-chip.on { background: var(--c); border-color: var(--c); color: #fff; box-shadow: 0 3px 10px color-mix(in srgb, var(--c) 40%, transparent); }
 .wiz-cat-actual { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 12px; padding: 7px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--c) 9%, white); border-left: 3px solid var(--c); }
-.wiz-cat-picker-grid { display: block !important; }
-.wiz-cat-picker { padding: 6px 0; }
-.wiz-cat-picker-title { font-weight: 800; font-size: 16px; margin-bottom: 14px; }
-.wiz-cat-picker-title i { color: var(--primary); margin-right: 6px; }
-.wiz-cat-picker-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
-.wiz-cat-option { display: flex; align-items: center; gap: 12px; text-align: left; border: 2px solid var(--border); background: var(--surface); border-radius: var(--radius-lg); padding: 14px 16px; cursor: pointer; font-family: var(--font); transition: all .15s; border-left: 6px solid var(--c); }
-.wiz-cat-option:hover { border-color: var(--c); transform: translateY(-1px); box-shadow: var(--shadow-md); }
-.wiz-cat-option-icon { width: 42px; height: 42px; border-radius: 12px; background: color-mix(in srgb, var(--c) 14%, white); color: var(--c); display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
-.wiz-cat-option-txt { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.wiz-cat-option-txt strong { font-size: 15px; color: var(--text); }
-.wiz-cat-option-txt small { font-size: 12px; color: var(--text-muted); }
-.wiz-cat-option > .fa-chevron-right { color: var(--text-muted); }
 .product-card { position: relative; }
 .badge-nuevo { position: absolute; top: 8px; left: 8px; z-index: 2; background: var(--gradient-green); color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .6px; padding: 3px 9px; border-radius: 10px; box-shadow: 0 2px 8px rgba(16,185,129,.4); }
 .product-card-img .badge-nuevo { top: auto; left: auto; bottom: 8px; right: 8px; }

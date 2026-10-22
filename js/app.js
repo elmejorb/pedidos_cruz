@@ -1428,8 +1428,8 @@ async function renderNuevoPedido(forceNew = false) {
         if (data) allProductos = data.productos || [];
         const catalogosWiz = (catResp && !catResp.error ? catResp.catalogos : []) || [];
         // Catálogo escogido para este pedido: '' = todos los productos, null = aún no escoge
-        let catalogoWiz = sessionStorage.getItem('pc_wiz_catalogo');
-        if (catalogoWiz !== null && catalogoWiz !== '' && !catalogosWiz.some(c => String(c.id_catalogo) === catalogoWiz)) catalogoWiz = null;
+        let catalogoWiz = sessionStorage.getItem('pc_wiz_catalogo') || '';
+        if (catalogoWiz !== '' && !catalogosWiz.some(c => String(c.id_catalogo) === catalogoWiz)) catalogoWiz = '';
 
         function renderCatalogoBar() {
             const bar = document.getElementById('wiz-catalogo-bar');
@@ -1453,34 +1453,8 @@ async function renderNuevoPedido(forceNew = false) {
             renderProducts(getFilteredWizardProducts());
         }
 
-        /** Antes de mostrar productos: escoger qué catálogo mostrarle al cliente */
-        function renderSelectorCatalogo() {
-            const grid = document.getElementById('products-grid');
-            const cuenta = id => allProductos.filter(p => (p.catalogos || []).includes(id)).length;
-            grid.classList.add('wiz-cat-picker-grid');
-            grid.innerHTML = `
-                <div class="wiz-cat-picker">
-                    <div class="wiz-cat-picker-title"><i class="fas fa-book-open"></i> ¿Qué catálogo le vas a mostrar al cliente?</div>
-                    <div class="wiz-cat-picker-list">
-                        ${catalogosWiz.map(c => `
-                            <button class="wiz-cat-option" data-id="${c.id_catalogo}" style="--c:${c.color}">
-                                <span class="wiz-cat-option-icon"><i class="fas fa-book-open"></i></span>
-                                <span class="wiz-cat-option-txt"><strong>${c.nombre}</strong><small>${cuenta(c.id_catalogo)} producto${cuenta(c.id_catalogo) === 1 ? '' : 's'}${c.descripcion ? ' · ' + c.descripcion : ''}</small></span>
-                                <i class="fas fa-chevron-right"></i>
-                            </button>`).join('')}
-                        <button class="wiz-cat-option todos" data-id="" style="--c:#64748B">
-                            <span class="wiz-cat-option-icon"><i class="fas fa-layer-group"></i></span>
-                            <span class="wiz-cat-option-txt"><strong>Todos los productos</strong><small>${allProductos.length} productos</small></span>
-                            <i class="fas fa-chevron-right"></i>
-                        </button>
-                    </div>
-                </div>`;
-            grid.querySelectorAll('.wiz-cat-option').forEach(b => b.onclick = () => { grid.classList.remove('wiz-cat-picker-grid'); elegirCatalogo(b.dataset.id); });
-        }
-
         function renderProducts(productos) {
             const grid = document.getElementById('products-grid');
-            if (catalogosWiz.length && catalogoWiz === null) { renderSelectorCatalogo(); return; }
             if (!productos.length) {
                 grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><i class="fas fa-box-open"></i><p>No hay productos en este catálogo con esa búsqueda</p></div>';
                 return;

@@ -68,6 +68,28 @@ class CatalogoController extends Controller
         ]);
     }
 
+    /** Catálogos disponibles para escoger en la página pública */
+    public function catalogos()
+    {
+        $general = !Catalogo::habilitado() || Catalogo::ajuste('catalogo_general_publico', '1') === '1';
+        $lista = [];
+        if (Catalogo::habilitado()) {
+            $lista = DB::table('pc_catalogos as c')
+                ->join('pc_catalogo_producto as cp', 'cp.id_catalogo', '=', 'c.id_catalogo')
+                ->join('pc_productos as p', function ($j) { $j->on('p.id_producto', '=', 'cp.id_producto')->where('p.activo', 1); })
+                ->where('c.activo', 1)
+                ->groupBy('c.id_catalogo', 'c.nombre', 'c.descripcion', 'c.color', 'c.codigo')
+                ->select('c.nombre', 'c.descripcion', 'c.color', 'c.codigo', DB::raw('COUNT(*) as total'))
+                ->orderBy('c.nombre')->get();
+        }
+        return response()->json([
+            'error' => false,
+            'catalogos' => $lista,
+            'general' => $general,
+            'total_general' => $general ? Producto::where('activo', 1)->count() : null,
+        ]);
+    }
+
     public function categorias(Request $request)
     {
         [$catalogo, $error] = $this->resolverCatalogo($request);

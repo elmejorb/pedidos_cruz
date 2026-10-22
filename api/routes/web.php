@@ -16,6 +16,7 @@ $router->post('/auth/login', 'AuthController@login');
 // Catálogo público (sin autenticación)
 $router->get('/catalogo', 'CatalogoController@index');
 $router->get('/catalogo/categorias', 'CatalogoController@categorias');
+$router->get('/catalogo/catalogos', 'CatalogoController@catalogos');
 
 // Rutas protegidas
 $router->group(['middleware' => 'auth'], function () use ($router) {

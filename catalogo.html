@@ -237,6 +237,25 @@
             pointer-events: none;
         }
         .product:hover .product-zoom { opacity: 1; }
+        /* Selector de catálogos */
+        .cat-picker-card { padding: 24px 20px; }
+        .cat-picker-title { text-align: center; margin: 0 0 20px; }
+        .cat-picker-title h2 { font-size: 22px; font-weight: 800; color: #0F172A; }
+        .cat-picker-title p { color: #64748B; font-size: 14px; margin-top: 4px; }
+        .cat-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+        .cat-opcion { display: flex; align-items: center; gap: 14px; text-align: left; background: #fff; border: 2px solid #E2E8F0; border-left: 7px solid var(--c); border-radius: 18px; padding: 18px 18px; cursor: pointer; font-family: inherit; transition: all .18s; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+        .cat-opcion:hover { transform: translateY(-3px); border-color: var(--c); box-shadow: 0 12px 24px -8px color-mix(in srgb, var(--c) 45%, transparent); }
+        .cat-opcion-icon { width: 54px; height: 54px; border-radius: 16px; background: color-mix(in srgb, var(--c) 14%, white); color: var(--c); display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+        .cat-opcion-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .cat-opcion-txt strong { font-size: 17px; color: #0F172A; }
+        .cat-opcion-txt span { font-size: 13px; color: #64748B; }
+        .cat-opcion > .fa-chevron-right { color: #94A3B8; }
+        .catalogo-switch { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #F1F5F9; }
+        .catalogo-switch .lbl { font-size: 12px; font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: .5px; }
+        .cat-chip { border: 2px solid #E2E8F0; background: #fff; border-radius: 20px; padding: 7px 14px; font-family: inherit; font-size: 13px; font-weight: 700; color: #475569; cursor: pointer; transition: all .15s; }
+        .cat-chip.active { background: var(--c); border-color: var(--c); color: #fff; box-shadow: 0 4px 12px color-mix(in srgb, var(--c) 40%, transparent); }
+        .cat-volver { border: none; background: #F1F5F9; color: #475569; border-radius: 20px; padding: 8px 14px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+        .cat-volver:hover { background: #E2E8F0; }
         .orden-select {
             padding: 12px 14px;
             border: 2px solid #E2E8F0;
@@ -509,7 +528,8 @@
     </div>
 
     <div class="container">
-        <div class="toolbar-card">
+        <div class="toolbar-card" id="toolbar-card">
+            <div class="catalogo-switch" id="catalogo-switch" style="display:none"></div>
             <div class="search-row">
                 <div class="search-box">
                     <i class="fas fa-search"></i>
@@ -556,9 +576,17 @@
         let allProductos = [];
         let categorias = [];
         let categoriaActiva = '';
-        // Enlace de catálogo de un vendedor: catalogo.html?c=codigo
-        const CATALOGO = new URLSearchParams(location.search).get('c') || '';
+        // Enlace compartido (catalogo.html?c=codigo): muestra SOLO ese catálogo, sin opción de ver otros.
+        // Sin enlace: primero se escoge el catálogo a mostrar y se puede cambiar con los chips.
+        const ENLACE = new URLSearchParams(location.search).get('c') || '';
+        let CATALOGO = ENLACE;
+        let listaCatalogos = [];
+        let generalPermitido = true;
+        let totalGeneral = 0;
+        const HERO_TITULO = 'Catálogo de Productos';
+        const HERO_TEXTO = 'Conoce nuestra variedad de productos y precios. Contacta a tu vendedor para hacer tu pedido.';
         const conCatalogo = p => { if (CATALOGO) p.set('c', CATALOGO); return p; };
+        const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
         function formatNumber(n) {
             return parseFloat(n || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -610,8 +638,12 @@
                 }
                 if (data.catalogo) {
                     document.querySelector('.hero h1').textContent = data.catalogo.nombre;
-                    if (data.catalogo.descripcion) document.querySelector('.hero p').textContent = data.catalogo.descripcion;
+                    document.querySelector('.hero p').textContent = data.catalogo.descripcion || HERO_TEXTO;
                     document.title = data.catalogo.nombre + ' - Catálogo';
+                } else {
+                    document.querySelector('.hero h1').textContent = HERO_TITULO;
+                    document.querySelector('.hero p').textContent = HERO_TEXTO;
+                    document.title = 'Catálogo de Productos';
                 }
                 allProductos = data.productos || [];
                 renderProductos();
@@ -716,9 +748,80 @@
         document.getElementById('search').addEventListener('input', debounce(cargarProductos, 350));
         document.getElementById('orden').addEventListener('change', renderProductos);
 
-        // Init
-        cargarCategorias();
-        cargarProductos();
+        function mostrarSelector() {
+            CATALOGO = '';
+            history.replaceState(null, '', location.pathname);
+            document.getElementById('toolbar-card').style.display = 'none';
+            document.querySelector('.hero h1').textContent = 'Nuestros catálogos';
+            document.querySelector('.hero p').textContent = 'Escoge el catálogo que quieres ver.';
+            document.title = 'Catálogos';
+            document.getElementById('products-area').innerHTML = `
+                <div class="toolbar-card cat-picker-card">
+                <div class="cat-picker-title"><h2>¿Qué catálogo quieres ver?</h2><p>Toca un catálogo para ver sus productos y precios</p></div>
+                <div class="cat-picker">
+                    ${listaCatalogos.map(c => `
+                        <button class="cat-opcion" data-c="${esc(c.codigo)}" style="--c:${esc(c.color)}">
+                            <span class="cat-opcion-icon"><i class="fas fa-book-open"></i></span>
+                            <span class="cat-opcion-txt"><strong>${esc(c.nombre)}</strong><span>${c.total} producto${c.total == 1 ? '' : 's'}${c.descripcion ? ' · ' + esc(c.descripcion) : ''}</span></span>
+                            <i class="fas fa-chevron-right"></i>
+                        </button>`).join('')}
+                    ${generalPermitido ? `
+                        <button class="cat-opcion" data-c="" style="--c:#64748B">
+                            <span class="cat-opcion-icon"><i class="fas fa-layer-group"></i></span>
+                            <span class="cat-opcion-txt"><strong>Todos los productos</strong><span>${totalGeneral} productos</span></span>
+                            <i class="fas fa-chevron-right"></i>
+                        </button>` : ''}
+                </div>
+                </div>`;
+            document.querySelectorAll('.cat-opcion').forEach(b => b.onclick = () => elegirCatalogo(b.dataset.c));
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function renderSwitch() {
+            const sw = document.getElementById('catalogo-switch');
+            if (ENLACE || !listaCatalogos.length) { sw.style.display = 'none'; return; }
+            sw.style.display = 'flex';
+            sw.innerHTML = `
+                <button class="cat-volver" id="cat-volver"><i class="fas fa-arrow-left"></i> Catálogos</button>
+                ${listaCatalogos.map(c => `<button class="cat-chip ${CATALOGO === c.codigo ? 'active' : ''}" data-c="${esc(c.codigo)}" style="--c:${esc(c.color)}">${esc(c.nombre)}</button>`).join('')}
+                ${generalPermitido ? `<button class="cat-chip ${CATALOGO === '' ? 'active' : ''}" data-c="" style="--c:#6366F1">Todos</button>` : ''}`;
+            document.getElementById('cat-volver').onclick = mostrarSelector;
+            sw.querySelectorAll('.cat-chip').forEach(b => b.onclick = () => elegirCatalogo(b.dataset.c));
+        }
+
+        function elegirCatalogo(codigo) {
+            CATALOGO = codigo;
+            // Se guarda en el hash (no en ?c=) para que al recargar siga en modo "escoger catálogo"
+            history.replaceState(null, '', location.pathname + '#catalogo=' + encodeURIComponent(codigo || 'todos'));
+            categoriaActiva = '';
+            document.getElementById('search').value = '';
+            document.getElementById('toolbar-card').style.display = '';
+            renderSwitch();
+            cargarCategorias();
+            cargarProductos();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function init() {
+            if (ENLACE) { cargarCategorias(); cargarProductos(); return; }
+            try {
+                const r = await fetch(API + '/catalogo/catalogos');
+                const d = await r.json();
+                listaCatalogos = d.catalogos || [];
+                generalPermitido = d.general !== false;
+                totalGeneral = d.total_general || 0;
+            } catch (e) { console.error(e); }
+
+            // Sin catálogos creados: todo como antes
+            if (!listaCatalogos.length) { cargarCategorias(); cargarProductos(); return; }
+
+            const previo = decodeURIComponent((location.hash.match(/catalogo=([^&]+)/) || [])[1] || '');
+            if (previo === 'todos' && generalPermitido) return elegirCatalogo('');
+            if (previo && listaCatalogos.some(c => c.codigo === previo)) return elegirCatalogo(previo);
+            mostrarSelector();
+        }
+
+        init();
     </script>
 </body>
 </html>
