@@ -578,10 +578,10 @@ class FacturacionElectronicaService
         $payload = $concepto === 2 ? $this->payloadAnulacion($original) : $this->payloadDevolucion($original, $lineas);
         $ahora = Carbon::now('America/Bogota');
         $payload['company_id'] = $login['company_id'];
+        // Igual al JSON de referencia de la API: solo el código. La API pone la descripción oficial
+        // de la Lista 34 (si se envía otro texto la DIAN notifica CBF04). El motivo queda guardado local.
         $payload['credit_note'] = [
             'discrepancy_response_code' => $concepto,
-            'correction_concept_id' => (string) $concepto,
-            'description' => mb_substr($motivo, 0, 250),
         ];
         $payload['billing_reference'] = [
             'prefix' => (string) $factura->prefijo,
