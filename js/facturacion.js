@@ -525,7 +525,9 @@ async function viewFactura(id, skipHash = false) {
                 <button class="btn btn-outline btn-sm" onclick="feImprimirCarta(${f.id_factura})"><i class="fas fa-file-pdf"></i> PDF Carta</button>
                 <button class="btn btn-outline btn-sm" onclick="feImprimirTicket(${f.id_factura})"><i class="fas fa-receipt"></i> Ticket</button>
                 <button class="btn btn-outline btn-sm" onclick="feEnviarEmail(${f.id_factura}, '${feEsc(f.cliente_email || '')}')"><i class="fas fa-envelope"></i> Email</button>
-                <button class="btn btn-sm fe-btn-anular" onclick="feAnular(${f.id_factura})"><i class="fas fa-file-circle-minus"></i> Nota Crédito</button>`
+                ${devuelto >= parseFloat(f.total) - 1
+                    ? `<span class="badge-status badge-fe-nota" style="align-self:center"><i class="fas fa-check"></i> Totalmente devuelta</span>`
+                    : `<button class="btn btn-sm fe-btn-anular" onclick="feAnular(${f.id_factura})"><i class="fas fa-file-circle-minus"></i> Nota Crédito</button>`}`
             : anulada ? `
                 <button class="btn btn-outline btn-sm" onclick="feImprimirCarta(${f.id_factura})"><i class="fas fa-file-pdf"></i> PDF (anulada)</button>`
             : `

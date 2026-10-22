@@ -537,6 +537,18 @@ class FacturacionElectronicaService
             $anulada = NotaCredito::where('id_factura', $factura->id_factura)->where('estado', 'autorizada')->where('concepto', 2)->exists();
             if ($enCurso || $anulada) return null;
 
+            // Regla contable: lo acreditado nunca puede superar el valor de la factura.
+            // Se revalida aquí, con la factura bloqueada, por si otra nota entró al mismo tiempo.
+            $acreditado = (float) NotaCredito::where('id_factura', $factura->id_factura)->where('estado', 'autorizada')->sum('total');
+            if ($concepto === 2 && $acreditado > 0) {
+                return 'La factura ya tiene devoluciones. Para reversar lo que falta, haz una nota crédito de devolución por los productos restantes.';
+            }
+            if ($acreditado + $totalNota > (float) $factura->total + 1) {
+                $saldo = max(0, (float) $factura->total - $acreditado);
+                return 'La nota crédito ($' . number_format($totalNota, 0, ',', '.') . ') supera el saldo de la factura ($'
+                    . number_format($saldo, 0, ',', '.') . '). Lo acreditado no puede ser mayor al valor facturado.';
+            }
+
             $nota = NotaCredito::create([
                 'id_factura' => $factura->id_factura,
                 'estado' => 'pendiente',
@@ -564,6 +576,9 @@ class FacturacionElectronicaService
             }
             return $nota;
         });
+        if (is_string($nota)) {
+            return ['ok' => false, 'http' => 409, 'mensaje' => $nota];
+        }
         if (!$nota) {
             return ['ok' => false, 'http' => 409, 'mensaje' => 'La factura ya está anulada o tiene una nota crédito en proceso. Espera un momento.'];
         }
