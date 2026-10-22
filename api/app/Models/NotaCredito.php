@@ -18,6 +18,11 @@ class NotaCredito extends Model
 
     protected $hidden = ['request_json', 'response_json'];
 
+    public function detalles()
+    {
+        return $this->hasMany(NotaCreditoDetalle::class, 'id_nota', 'id_nota');
+    }
+
     public function factura()
     {
         return $this->belongsTo(Factura::class, 'id_factura', 'id_factura');

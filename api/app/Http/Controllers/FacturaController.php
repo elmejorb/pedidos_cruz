@@ -55,12 +55,18 @@ class FacturaController extends Controller
 
         $rel = ['detalles', 'pedido:id_pedido,numero_pedido,id_ruta,id_vendedor', 'pedido.vendedor:id_usuario,nombre', 'usuario:id_usuario,nombre'];
         if (\Illuminate\Support\Facades\Schema::hasTable('pc_notas_credito')) $rel[] = 'notasCredito.usuario:id_usuario,nombre';
+        if (\Illuminate\Support\Facades\Schema::hasTable('pc_nota_credito_detalle')) $rel[] = 'notasCredito.detalles';
         $factura = Factura::with($rel)->find($id);
         if (!$factura) return response()->json(['error' => true, 'mensaje' => 'Factura no encontrada'], 404);
 
         // Datos extra para el PDF: departamento del cliente (del JSON enviado) y ciudad de la empresa
         $req = json_decode($factura->getAttributes()['request_json'] ?? '', true);
         $factura->setAttribute('cliente_departamento', $req['customer']['municipality']['department']['name'] ?? null);
+        // Cantidad ya devuelta por línea (notas crédito de devolución autorizadas)
+        $devuelto = FacturacionElectronicaService::devueltoPorLinea($factura->id_factura);
+        $factura->detalles->each(fn($d) => $d->setAttribute('devuelto', (float) ($devuelto[$d->id_detalle] ?? 0)));
+        $notas = $factura->relationLoaded('notasCredito') ? $factura->notasCredito : collect();
+        $factura->setAttribute('total_devuelto', round((float) $notas->where('estado', 'autorizada')->where('concepto', 1)->sum('total'), 2));
         $empresa = ConfigFe::actual();
         $ciudad = $empresa->id_municipio_default ? DB::table('pc_dian_municipios as m')
             ->join('pc_dian_departamentos as d', 'd.id', '=', 'm.department_id')
@@ -173,6 +179,29 @@ class FacturaController extends Controller
         if (!$factura) return response()->json(['error' => true, 'mensaje' => 'Factura no encontrada'], 404);
 
         $res = (new FacturacionElectronicaService())->anular($factura, trim($request->motivo), $request->usuario->id_usuario);
+        return response()->json([
+            'error' => !$res['ok'],
+            'mensaje' => $res['mensaje'],
+            'errores' => $res['errores'] ?? [],
+            'nota' => $res['nota'] ?? null,
+        ], $res['ok'] ? 200 : ($res['http'] ?? 422));
+    }
+
+    /** Nota crédito: concepto 1 (devolución, con líneas) o 2 (anulación) */
+    public function notaCredito(Request $request, $id)
+    {
+        if ($r = $this->soloAdmin($request)) return $r;
+        $this->validate($request, [
+            'concepto' => 'required|in:1,2',
+            'motivo' => 'required|string|min:5|max:500',
+            'lineas' => 'array',
+        ]);
+        $factura = Factura::find($id);
+        if (!$factura) return response()->json(['error' => true, 'mensaje' => 'Factura no encontrada'], 404);
+
+        $res = (new FacturacionElectronicaService())->notaCredito(
+            $factura, (int) $request->concepto, trim($request->motivo), (array) $request->input('lineas', []), $request->usuario->id_usuario
+        );
         return response()->json([
             'error' => !$res['ok'],
             'mensaje' => $res['mensaje'],

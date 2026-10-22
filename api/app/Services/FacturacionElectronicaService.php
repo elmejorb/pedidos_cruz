@@ -6,6 +6,10 @@ use App\Models\ConfigFe;
 use App\Models\Factura;
 use App\Models\FacturaDetalle;
 use App\Models\NotaCredito;
+use App\Models\NotaCreditoDetalle;
+use App\Models\Producto;
+use App\Models\PedidoHistorial;
+use Illuminate\Support\Facades\Schema;
 use App\Models\Pedido;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -458,39 +462,110 @@ class FacturacionElectronicaService
     }
 
     // ==================================================================
-    // NOTA CRÉDITO: ANULACIÓN (concepto 2, Lista 34 DIAN)
-    // Se reenvía el MISMO JSON de la factura original + billing_reference + credit_note,
-    // igual que el facturador Conta (enviar.php, case 'nota_credito').
+    // NOTAS CRÉDITO (Lista 34 DIAN) → POST /api/notas/credito/enviar
+    //   1 = Devolución: solo las líneas y cantidades devueltas
+    //   2 = Anulación: todas las líneas de la factura (la API valida el total)
+    // Formato según el JSON de referencia de la API (credit_note.discrepancy_response_code,
+    // billing_reference con prefix + number + uuid + issue_date, base_quantity 1).
     // ==================================================================
     public function anular(Factura $factura, string $motivo, int $idUsuario): array
     {
+        return $this->notaCredito($factura, 2, $motivo, [], $idUsuario);
+    }
+
+    /** Cantidad ya devuelta por línea de factura (solo notas crédito autorizadas) */
+    public static function devueltoPorLinea(int $idFactura): array
+    {
+        if (!Schema::hasTable('pc_nota_credito_detalle')) return [];
+        return DB::table('pc_nota_credito_detalle as d')
+            ->join('pc_notas_credito as n', 'n.id_nota', '=', 'd.id_nota')
+            ->where('n.id_factura', $idFactura)->where('n.estado', 'autorizada')
+            ->groupBy('d.id_detalle_factura')
+            ->select('d.id_detalle_factura', DB::raw('SUM(d.cantidad) as devuelto'))
+            ->pluck('devuelto', 'd.id_detalle_factura')
+            ->map(fn($v) => (float) $v)->all();
+    }
+
+    /**
+     * @param array $lineasPedidas [['id_detalle' => int, 'cantidad' => float], ...] (solo concepto 1)
+     */
+    public function notaCredito(Factura $factura, int $concepto, string $motivo, array $lineasPedidas, int $idUsuario): array
+    {
+        if (!in_array($concepto, [1, 2], true)) {
+            return ['ok' => false, 'http' => 422, 'mensaje' => 'Concepto de nota crédito no disponible todavía'];
+        }
         if ($factura->estado !== 'autorizada' || !$factura->cufe) {
-            return ['ok' => false, 'http' => 409, 'mensaje' => 'Solo se pueden anular facturas autorizadas por la DIAN'];
+            return ['ok' => false, 'http' => 409, 'mensaje' => 'Solo se pueden hacer notas crédito a facturas autorizadas por la DIAN'];
         }
         $original = json_decode($factura->request_json ?? '', true);
-        if (!is_array($original) || empty($original['invoice_lines'])) {
+        if (!is_array($original) || empty($original['invoice_lines']) || empty($original['customer'])) {
             return ['ok' => false, 'http' => 422, 'mensaje' => 'No se encontró el JSON original de la factura para armar la nota crédito'];
         }
 
-        // Bloqueo contra doble anulación
-        $nota = DB::transaction(function () use ($factura, $motivo, $idUsuario) {
+        $detalles = $factura->detalles()->get()->keyBy('id_detalle');
+        $devuelto = self::devueltoPorLinea($factura->id_factura);
+
+        if ($concepto === 2 && array_sum($devuelto) > 0) {
+            return ['ok' => false, 'http' => 409, 'mensaje' => 'La factura ya tiene devoluciones. Para reversar lo que falta, haz una nota crédito de devolución por los productos restantes.'];
+        }
+
+        // ---------- Líneas devueltas (concepto 1) ----------
+        $lineas = [];
+        if ($concepto === 1) {
+            foreach ($lineasPedidas as $lp) {
+                $id = (int) ($lp['id_detalle'] ?? 0);
+                $cant = round((float) ($lp['cantidad'] ?? 0), 2);
+                if ($cant <= 0) continue;
+                $d = $detalles[$id] ?? null;
+                if (!$d) return ['ok' => false, 'http' => 422, 'mensaje' => 'Una de las líneas no pertenece a esta factura'];
+                $disponible = round((float) $d->cantidad - ($devuelto[$id] ?? 0), 2);
+                if ($cant > $disponible + 0.001) {
+                    return ['ok' => false, 'http' => 422, 'mensaje' => "No puedes devolver {$cant} de \"{$d->descripcion}\": quedan {$disponible} por devolver"];
+                }
+                $lineas[] = $this->lineaDevolucion($d, $cant);
+            }
+            if (!$lineas) return ['ok' => false, 'http' => 422, 'mensaje' => 'Indica la cantidad a devolver de al menos un producto'];
+        }
+        $totalNota = $concepto === 2 ? (float) $factura->total : round(array_sum(array_column($lineas, 'total')), 2);
+
+        // ---------- Registro local con bloqueo contra doble envío ----------
+        $nota = DB::transaction(function () use ($factura, $concepto, $motivo, $idUsuario, $totalNota, $lineas) {
             Factura::where('id_factura', $factura->id_factura)->lockForUpdate()->first();
             $enCurso = NotaCredito::where('id_factura', $factura->id_factura)
-                ->where(fn($q) => $q->where('estado', 'autorizada')
-                    ->orWhere(fn($w) => $w->where('estado', 'pendiente')->where('updated_at', '>', Carbon::now()->subMinutes(3))))
+                ->where(fn($q) => $q->where('estado', 'pendiente')->where('updated_at', '>', Carbon::now()->subMinutes(3)))
                 ->exists();
-            if ($enCurso) return null;
-            return NotaCredito::create([
+            $anulada = NotaCredito::where('id_factura', $factura->id_factura)->where('estado', 'autorizada')->where('concepto', 2)->exists();
+            if ($enCurso || $anulada) return null;
+
+            $nota = NotaCredito::create([
                 'id_factura' => $factura->id_factura,
                 'estado' => 'pendiente',
-                'concepto' => 2,
+                'concepto' => $concepto,
                 'motivo' => mb_substr($motivo, 0, 500),
-                'total' => $factura->total,
+                'total' => $totalNota,
                 'id_usuario' => $idUsuario,
             ]);
+            foreach ($lineas as $l) {
+                $d = $l['detalle'];
+                NotaCreditoDetalle::create([
+                    'id_nota' => $nota->id_nota,
+                    'id_detalle_factura' => $d->id_detalle,
+                    'id_producto' => $d->id_producto,
+                    'codigo' => $d->codigo,
+                    'descripcion' => $d->descripcion,
+                    'unidad' => $d->unidad,
+                    'cantidad' => $l['cantidad'],
+                    'precio' => $d->precio,
+                    'iva_porcentaje' => $d->iva_porcentaje,
+                    'base' => $l['base'],
+                    'iva' => $l['iva'],
+                    'total' => $l['total'],
+                ]);
+            }
+            return $nota;
         });
         if (!$nota) {
-            return ['ok' => false, 'http' => 409, 'mensaje' => 'La factura ya tiene una nota crédito autorizada o en proceso'];
+            return ['ok' => false, 'http' => 409, 'mensaje' => 'La factura ya está anulada o tiene una nota crédito en proceso. Espera un momento.'];
         }
 
         $login = $this->login();
@@ -499,20 +574,33 @@ class FacturacionElectronicaService
             return ['ok' => false, 'http' => 502, 'mensaje' => $login['mensaje']];
         }
 
-        $payload = $original;
-        unset($payload['note'], $payload['send_email'], $payload['customer_email'], $payload['withholding_taxes']);
+        // ---------- JSON para la API ----------
+        $payload = $concepto === 2 ? $this->payloadAnulacion($original) : $this->payloadDevolucion($original, $lineas);
+        $ahora = Carbon::now('America/Bogota');
         $payload['company_id'] = $login['company_id'];
+        $payload['credit_note'] = [
+            'discrepancy_response_code' => $concepto,
+            'correction_concept_id' => (string) $concepto,
+            'description' => mb_substr($motivo, 0, 250),
+        ];
         $payload['billing_reference'] = [
-            'number' => ($factura->prefijo ?? '') . $factura->numero,
+            'prefix' => (string) $factura->prefijo,
+            'number' => (string) $factura->numero,
             'uuid' => $factura->cufe,
             'scheme_name' => 'CUFE-SHA384',
             'issue_date' => substr((string) $factura->fecha_emision, 0, 10),
         ];
-        $payload['credit_note'] = [
-            'reason' => 'Anulación de factura electrónica',
-            'correction_concept_id' => '2',
-            'description' => mb_substr($motivo, 0, 250),
-        ];
+        $pf = $original['payment_form'] ?? ['payment_form_id' => 1, 'payment_method_id' => 10];
+        $pf['payment_due_date'] = $pf['payment_due_date'] ?? $ahora->toDateString();
+        $pf['duration_measure'] = (string) ($pf['duration_measure'] ?? '0');
+        $payload['payment_form'] = $pf;
+        $payload['date'] = $ahora->toDateString();
+        $payload['time'] = $ahora->format('H:i:s');
+        $email = $original['customer']['email'] ?? '';
+        if ($this->config->enviar_email && $email && $email !== '-' && filter_var(explode(',', $email)[0], FILTER_VALIDATE_EMAIL)) {
+            $payload['send_email'] = 'S';
+            $payload['customer_email'] = $email;
+        }
 
         $nota->request_json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $nota->save();
@@ -543,13 +631,17 @@ class FacturacionElectronicaService
                 'mensaje_dian' => mb_substr($mensajeDian, 0, 500),
                 'errores' => null,
             ])->save();
-            $factura->update(['estado' => 'anulada']);
 
-            return [
-                'ok' => true, 'http' => 200,
-                'mensaje' => "Factura {$factura->prefijo}{$factura->numero} anulada con la nota crédito {$prefijo}{$numero}",
-                'nota' => $nota->fresh(),
-            ];
+            if ($concepto === 2) {
+                $factura->update(['estado' => 'anulada']);
+                $msg = "Factura {$factura->prefijo}{$factura->numero} anulada con la nota crédito {$prefijo}{$numero}";
+            } else {
+                $unidades = $this->devolverAlInventario($nota, $factura, $idUsuario, "{$prefijo}{$numero}");
+                $msg = "Nota crédito {$prefijo}{$numero} de devolución autorizada por $" . number_format($totalNota, 0, ',', '.')
+                    . ($unidades > 0 ? " · {$unidades} unidades devueltas al inventario" : '');
+            }
+
+            return ['ok' => true, 'http' => 200, 'mensaje' => $msg, 'nota' => $nota->fresh('detalles')];
         }
 
         $errores = self::extraerErrores($body, $res);
@@ -562,14 +654,114 @@ class FacturacionElectronicaService
             'mensaje_dian' => mb_substr(is_string($mensaje) ? $mensaje : json_encode($mensaje), 0, 500),
             'errores' => $errores,
         ])->save();
-        Log::warning('NC rechazada', ['id_factura' => $factura->id_factura, 'errores' => $errores]);
+        Log::warning('NC rechazada', ['id_factura' => $factura->id_factura, 'concepto' => $concepto, 'errores' => $errores]);
 
         return [
             'ok' => false, 'http' => 422,
             'mensaje' => $nota->mensaje_dian,
             'errores' => array_map(fn($e) => trim(($e['code'] ?? '') . ' ' . ($e['message'] ?? '')), $errores),
-            'nota' => $nota->fresh(),
+            'nota' => $nota->fresh('detalles'),
         ];
+    }
+
+    /** Valores de una línea devuelta (precio con IVA incluido; el descuento se prorratea) */
+    private function lineaDevolucion(FacturaDetalle $d, float $cant): array
+    {
+        $pct = (float) $d->iva_porcentaje;
+        $descuento = (float) $d->cantidad > 0 ? round((float) $d->descuento * $cant / (float) $d->cantidad, 2) : 0;
+        $total = round($cant * (float) $d->precio - $descuento, 2);
+        $iva = $pct > 0 ? round($total * ($pct / (100 + $pct)), 2) : 0;
+        return [
+            'detalle' => $d, 'cantidad' => $cant, 'descuento' => $descuento,
+            'total' => $total, 'iva' => $iva, 'base' => round($total - $iva, 2), 'factor' => 1 + $pct / 100,
+        ];
+    }
+
+    /** Anulación: las mismas líneas y totales de la factura original */
+    private function payloadAnulacion(array $original): array
+    {
+        $p = $original;
+        unset($p['note'], $p['send_email'], $p['customer_email'], $p['withholding_taxes']);
+        return $p;
+    }
+
+    /** Devolución: solo lo devuelto, con base_quantity 1 como en el JSON de referencia */
+    private function payloadDevolucion(array $original, array $lineas): array
+    {
+        $n = fn($v) => number_format((float) $v, 2, '.', '');
+        $items = [];
+        $base = 0;
+        $iva = 0;
+        foreach ($lineas as $l) {
+            $d = $l['detalle'];
+            $bruto = round($l['cantidad'] * (float) $d->precio / $l['factor'], 2);
+            $items[] = [
+                'unit_measure_id' => (int) ($d->unit_measure_id ?: 70),
+                'invoiced_quantity' => $n($l['cantidad']),
+                'line_extension_amount' => $n($l['base']),
+                'free_of_charge_indicator' => false,
+                'allowance_charges' => $l['descuento'] > 0 ? [[
+                    'charge_indicator' => false,
+                    'allowance_charge_reason' => 'Descuento',
+                    'amount' => $n($bruto - $l['base']),
+                    'base_amount' => $n($bruto),
+                ]] : [],
+                'tax_totals' => [[
+                    'tax_id' => 1,
+                    'tax_amount' => $n($l['iva']),
+                    'taxable_amount' => $n($l['base']),
+                    'percent' => $n($d->iva_porcentaje),
+                ]],
+                'description' => $d->descripcion,
+                'code' => $d->codigo ?: (string) $d->id_producto,
+                'type_item_identification_id' => 3,
+                'price_amount' => $n((float) $d->precio / $l['factor']),
+                'base_quantity' => '1.00',
+            ];
+            $base += $l['base'];
+            $iva += $l['iva'];
+        }
+        return [
+            'customer' => $original['customer'],
+            'legal_monetary_totals' => [
+                'line_extension_amount' => $n($base),
+                'tax_exclusive_amount' => $n($base),
+                'tax_inclusive_amount' => $n($base + $iva),
+                'allowance_total_amount' => '0.00',
+                'charge_total_amount' => '0.00',
+                'payable_amount' => $n($base + $iva),
+            ],
+            'invoice_lines' => $items,
+        ];
+    }
+
+    /** Suma al stock lo devuelto (cajas → unidades) y deja constancia en el historial del pedido */
+    private function devolverAlInventario(NotaCredito $nota, Factura $factura, int $idUsuario, string $numeroNc): int
+    {
+        $total = 0;
+        foreach (NotaCreditoDetalle::where('id_nota', $nota->id_nota)->get() as $l) {
+            $prod = $l->id_producto ? Producto::find($l->id_producto) : null;
+            if (!$prod) continue;
+            $porUnidad = mb_strtolower((string) $l->unidad) === 'caja' ? max(1, (int) $prod->unidades_por_caja) : 1;
+            $unidades = (int) round((float) $l->cantidad * $porUnidad);
+            if ($unidades <= 0) continue;
+            $prod->stock = (int) $prod->stock + $unidades;
+            $prod->save();
+            $l->update(['unidades_stock' => $unidades]);
+            $total += $unidades;
+        }
+        $pedido = Pedido::find($factura->id_pedido);
+        if ($pedido) {
+            PedidoHistorial::create([
+                'id_pedido' => $pedido->id_pedido,
+                'estado_anterior' => $pedido->estado,
+                'estado_nuevo' => $pedido->estado,
+                'id_usuario' => $idUsuario,
+                'comentario' => "Devolución con nota crédito {$numeroNc} por $" . number_format((float) $nota->total, 0, ',', '.') . " ({$total} unidades al inventario)",
+                'fecha' => Carbon::now(),
+            ]);
+        }
+        return $total;
     }
 
     // ==================================================================

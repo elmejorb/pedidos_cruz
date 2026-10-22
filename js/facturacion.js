@@ -29,7 +29,7 @@ const FE = {
     },
     CONCEPTOS_NC: [
         [2, 'Anulación de factura electrónica', 'La factura queda sin efecto. Se envía NC por el total de la factura original.', true],
-        [1, 'Devolución parcial de bienes / no aceptación parcial del servicio', 'Próximamente — requiere selección de ítems y cantidades.', false],
+        [1, 'Devolución de productos', 'Devuelve parte o todos los productos. Vuelven al inventario.', true],
         [3, 'Rebaja o descuento parcial o total', 'Próximamente — requiere campo de rebaja.', false],
         [4, 'Ajuste de precio', 'Próximamente — requiere precio nuevo por ítem.', false],
         [5, 'Otros', 'Próximamente.', false],
@@ -480,7 +480,9 @@ async function viewFactura(id, skipHash = false) {
     const anulada = f.estado === 'anulada';
     const conCufe = ok || anulada;
     const qr = conCufe ? feQrDataURL(f.cufe, 5) : '';
-    const nc = (f.notas_credito || []).find(n => n.estado === 'autorizada');
+    const ncs = (f.notas_credito || []).filter(n => n.estado === 'autorizada');
+    const nc = ncs.find(n => +n.concepto === 2);
+    const devuelto = parseFloat(f.total_devuelto || 0);
     const ncFallidas = (f.notas_credito || []).filter(n => n.estado === 'rechazada' || n.estado === 'error');
     const ivas = feResumenIva(f.detalles || []);
 
@@ -493,7 +495,7 @@ async function viewFactura(id, skipHash = false) {
                 <button class="btn btn-outline btn-sm" onclick="feImprimirCarta(${f.id_factura})"><i class="fas fa-file-pdf"></i> PDF Carta</button>
                 <button class="btn btn-outline btn-sm" onclick="feImprimirTicket(${f.id_factura})"><i class="fas fa-receipt"></i> Ticket</button>
                 <button class="btn btn-outline btn-sm" onclick="feEnviarEmail(${f.id_factura}, '${feEsc(f.cliente_email || '')}')"><i class="fas fa-envelope"></i> Email</button>
-                <button class="btn btn-sm fe-btn-anular" onclick="feAnular(${f.id_factura})"><i class="fas fa-ban"></i> Anular (Nota Crédito)</button>`
+                <button class="btn btn-sm fe-btn-anular" onclick="feAnular(${f.id_factura})"><i class="fas fa-file-circle-minus"></i> Nota Crédito</button>`
             : anulada ? `
                 <button class="btn btn-outline btn-sm" onclick="feImprimirCarta(${f.id_factura})"><i class="fas fa-file-pdf"></i> PDF (anulada)</button>`
             : `
@@ -517,23 +519,31 @@ async function viewFactura(id, skipHash = false) {
 
         <div class="detail-grid fade-in">
             <div>
-                ${nc ? `
-                    <div class="card fe-nc-card" style="margin-bottom:20px">
-                        <div class="card-body">
-                            <div class="fe-nc-title"><i class="fas fa-file-circle-minus"></i> Nota Crédito ${feEsc((nc.prefijo || '') + (nc.numero || ''))} <span class="badge-status badge-fe-autorizada" style="margin-left:6px">Autorizada</span></div>
-                            <div class="fe-nc-grid">
-                                <div><span>Concepto</span><strong>2 · Anulación de factura electrónica</strong></div>
-                                <div><span>Valor</span><strong>${feMoney(nc.total)}</strong></div>
-                                <div><span>Fecha</span><strong>${formatDate(nc.fecha_emision || nc.created_at)}</strong></div>
-                                <div><span>Emitida por</span><strong>${feEsc(nc.usuario?.nombre || '-')}</strong></div>
-                            </div>
-                            <div class="fe-nc-motivo"><b>Motivo:</b> ${feEsc(nc.motivo)}</div>
-                            <div class="fe-cufe" style="margin:10px 0 0;max-width:none">CUDE: ${feEsc(nc.cufe || '')}</div>
-                        </div>
+                ${devuelto > 0 ? `
+                    <div class="fe-devol-resumen">
+                        <div><span>Facturado</span><strong>${feMoney(f.total)}</strong></div>
+                        <div class="menos"><span>Devuelto (${ncs.filter(n => +n.concepto === 1).length} NC)</span><strong>-${feMoney(devuelto)}</strong></div>
+                        <div class="neto"><span>Neto</span><strong>${feMoney(parseFloat(f.total) - devuelto)}</strong></div>
                     </div>` : ''}
+                ${ncs.map(n => `
+                    <div class="card fe-nc-card ${+n.concepto === 1 ? 'devolucion' : ''}" style="margin-bottom:20px">
+                        <div class="card-body">
+                            <div class="fe-nc-title"><i class="fas ${+n.concepto === 1 ? 'fa-rotate-left' : 'fa-file-circle-minus'}"></i> Nota Crédito ${feEsc((n.prefijo || '') + (n.numero || ''))} <span class="badge-status badge-fe-autorizada" style="margin-left:6px">Autorizada</span></div>
+                            <div class="fe-nc-grid">
+                                <div><span>Concepto</span><strong>${+n.concepto === 1 ? '1 · Devolución de productos' : '2 · Anulación de factura electrónica'}</strong></div>
+                                <div><span>Valor</span><strong>${feMoney(n.total)}</strong></div>
+                                <div><span>Fecha</span><strong>${formatDate(n.fecha_emision || n.created_at)}</strong></div>
+                                <div><span>Emitida por</span><strong>${feEsc(n.usuario?.nombre || '-')}</strong></div>
+                            </div>
+                            ${(n.detalles || []).length ? `
+                                <div class="fe-nc-lineas">${n.detalles.map(d => `<div><span>${formatNumber(d.cantidad)} × ${feEsc(d.descripcion)}</span><b>${feMoney(d.total)}</b></div>`).join('')}</div>` : ''}
+                            <div class="fe-nc-motivo"><b>Motivo:</b> ${feEsc(n.motivo)}</div>
+                            <div class="fe-cufe" style="margin:10px 0 0;max-width:none">CUDE: ${feEsc(n.cufe || '')}</div>
+                        </div>
+                    </div>`).join('')}
                 ${ok && ncFallidas.length ? `
                     <div class="fe-alert warning" style="margin-bottom:20px">
-                        <div class="fe-alert-title"><i class="fas fa-triangle-exclamation"></i> Intento de anulación fallido</div>
+                        <div class="fe-alert-title"><i class="fas fa-triangle-exclamation"></i> Último intento de nota crédito fallido</div>
                         ${feEsc(ncFallidas[ncFallidas.length - 1].mensaje_dian || '')}
                         ${(ncFallidas[ncFallidas.length - 1].errores || []).length ? `<ul>${ncFallidas[ncFallidas.length - 1].errores.map(e => `<li><code>${feEsc(e.code)}</code> ${feEsc(e.message)}</li>`).join('')}</ul>` : ''}
                     </div>` : ''}
@@ -552,7 +562,7 @@ async function viewFactura(id, skipHash = false) {
                                 ${(f.detalles || []).map(d => `
                                     <tr>
                                         <td><div style="font-weight:600">${feEsc(d.descripcion)}</div><div style="font-size:11px;color:var(--text-muted)">${feEsc(d.codigo || '')} · ${feEsc(d.unidad || '')}</div></td>
-                                        <td style="text-align:right">${formatNumber(d.cantidad)}</td>
+                                        <td style="text-align:right">${formatNumber(d.cantidad)}${parseFloat(d.devuelto) > 0 ? `<div class="fe-devuelto">-${formatNumber(d.devuelto)} devuelto</div>` : ''}</td>
                                         <td style="text-align:right">${feMoney(d.precio)}</td>
                                         <td style="text-align:right">${formatNumber(d.iva_porcentaje)}%</td>
                                         <td style="text-align:right;font-weight:700">${feMoney(d.total)}</td>
@@ -1298,67 +1308,123 @@ async function feAnular(id) {
     const data = await api(`/facturas/${id}`);
     if (!data || data.error) return;
     const f = data.factura;
+    const lineas = (f.detalles || []).map(d => ({ ...d, disponible: Math.max(0, parseFloat(d.cantidad) - parseFloat(d.devuelto || 0)) }));
+    const hayDevoluciones = lineas.some(l => parseFloat(l.devuelto || 0) > 0);
+    let concepto = hayDevoluciones ? 1 : 2;
 
     openModal('Emitir Nota Crédito', `
         <div class="fe-nc-sub"><i class="fas fa-file-circle-minus"></i> Factura <b>${feEsc(feNumero(f))}</b> — ${feEsc(f.cliente_nombre)} — <b>${feMoney(f.total)}</b></div>
         <div class="fe-box-title" style="margin-top:16px">Concepto DIAN *</div>
         <div class="fe-nc-conceptos">
-            ${FE.CONCEPTOS_NC.map(([v, t, d, on]) => `
-                <label class="fe-nc-concepto ${on ? 'on' : 'off'}">
-                    <input type="radio" name="fe-nc-concepto" value="${v}" ${v === 2 ? 'checked' : ''} ${on ? '' : 'disabled'}>
-                    <div><strong>${v}. ${t}</strong><span>${d}</span></div>
-                </label>`).join('')}
+            ${FE.CONCEPTOS_NC.map(([v, t, d, on]) => {
+                const bloqueada = v === 2 && hayDevoluciones;
+                return `
+                <label class="fe-nc-concepto ${on && !bloqueada ? 'on' : 'off'}">
+                    <input type="radio" name="fe-nc-concepto" value="${v}" ${v === concepto ? 'checked' : ''} ${on && !bloqueada ? '' : 'disabled'}>
+                    <div><strong>${v}. ${t}</strong><span>${bloqueada ? 'No disponible: la factura ya tiene devoluciones. Devuelve lo que falta con el concepto 1.' : d}</span></div>
+                </label>`;
+            }).join('')}
+        </div>
+        <div id="fe-nc-devol" style="display:none;margin-top:14px">
+            <div class="fe-box-title">Productos a devolver</div>
+            <div class="fe-nc-tabla">
+                ${lineas.map((l, i) => `
+                    <div class="fe-nc-fila ${l.disponible <= 0 ? 'agotada' : ''}">
+                        <div class="fe-nc-prod"><strong>${feEsc(l.descripcion)}</strong>
+                            <span>${feMoney(l.precio)} c/u · facturado ${formatNumber(l.cantidad)}${parseFloat(l.devuelto || 0) > 0 ? ` · ya devuelto ${formatNumber(l.devuelto)}` : ''}</span></div>
+                        <div class="fe-nc-cant">
+                            ${l.disponible > 0 ? `
+                                <input type="number" min="0" max="${l.disponible}" step="1" value="0" data-i="${i}" class="fe-nc-input">
+                                <button type="button" class="btn btn-ghost btn-sm fe-nc-todo" data-i="${i}" title="Devolver todo lo disponible">Todo (${formatNumber(l.disponible)})</button>`
+                            : '<span class="fe-nc-agotado">Devuelto completo</span>'}
+                        </div>
+                    </div>`).join('')}
+            </div>
+            <div class="fe-nc-total" id="fe-nc-total"></div>
         </div>
         <div class="form-group" style="margin-top:16px">
             <label>Motivo / descripción *</label>
-            <textarea id="fe-nc-motivo" rows="3" maxlength="250" style="padding-left:14px" placeholder="Ej: Anulación de la factura por error en los datos"></textarea>
+            <textarea id="fe-nc-motivo" rows="2" maxlength="250" style="padding-left:14px" placeholder="Ej: El cliente devolvió producto en mal estado"></textarea>
         </div>
-        <div class="fe-alert warning" style="margin:0">
-            <i class="fas fa-triangle-exclamation"></i> <b>Importante:</b> una vez enviada a la DIAN, la Nota Crédito queda registrada permanentemente.
-            La factura original quedará marcada como <b>Anulada</b> y el pedido se podrá volver a facturar.
-        </div>
+        <div class="fe-alert warning" style="margin:0" id="fe-nc-aviso"></div>
     `, `
         <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
         <button class="btn fe-btn-nc" id="fe-nc-enviar"><i class="fas fa-paper-plane"></i> Emitir Nota Crédito</button>
     `);
     document.getElementById('modal-container').classList.add('modal-nc');
 
-    document.getElementById('fe-nc-enviar').onclick = async () => {
-        const motivo = document.getElementById('fe-nc-motivo').value.trim();
-        if (motivo.length < 5) { toast('Escribe el motivo de la anulación', 'warning'); document.getElementById('fe-nc-motivo').focus(); return; }
-        if (!confirm(`¿Anular la factura ${feNumero(f)} por ${feMoney(f.total)} ante la DIAN? Esta acción no se puede deshacer.`)) return;
+    const $ = i => document.getElementById(i);
+    const cantidades = () => [...document.querySelectorAll('.fe-nc-input')].map(inp => ({ i: +inp.dataset.i, cant: Math.min(Math.max(0, parseFloat(inp.value) || 0), lineas[+inp.dataset.i].disponible) }));
+    const totalDevolucion = () => cantidades().reduce((s, c) => {
+        const l = lineas[c.i];
+        const desc = parseFloat(l.cantidad) > 0 ? parseFloat(l.descuento || 0) * c.cant / parseFloat(l.cantidad) : 0;
+        return s + c.cant * parseFloat(l.precio) - desc;
+    }, 0);
+    const pintar = () => {
+        $('fe-nc-devol').style.display = concepto === 1 ? '' : 'none';
+        $('fe-nc-aviso').innerHTML = concepto === 1
+            ? '<i class="fas fa-triangle-exclamation"></i> <b>Importante:</b> la Nota Crédito queda registrada en la DIAN permanentemente. Los productos devueltos <b>vuelven al inventario</b>.'
+            : '<i class="fas fa-triangle-exclamation"></i> <b>Importante:</b> la Nota Crédito queda registrada en la DIAN permanentemente. La factura quedará <b>Anulada</b> y el pedido se podrá volver a facturar.';
+        if (concepto === 1) {
+            const t = totalDevolucion(), n = cantidades().filter(c => c.cant > 0).length;
+            $('fe-nc-total').innerHTML = n ? `<span>${n} producto${n > 1 ? 's' : ''} a devolver</span><strong>${feMoney(t)}</strong>` : '<span>Indica la cantidad a devolver</span><strong>$0</strong>';
+        }
+    };
+    document.querySelectorAll('input[name="fe-nc-concepto"]').forEach(r => r.onchange = () => { concepto = +r.value; pintar(); });
+    document.querySelectorAll('.fe-nc-input').forEach(inp => inp.oninput = pintar);
+    document.querySelectorAll('.fe-nc-todo').forEach(b => b.onclick = () => {
+        const inp = document.querySelector(`.fe-nc-input[data-i="${b.dataset.i}"]`);
+        inp.value = lineas[+b.dataset.i].disponible; pintar();
+    });
+    pintar();
 
-        document.getElementById('modal-body').innerHTML = `
+    $('fe-nc-enviar').onclick = async () => {
+        const motivo = $('fe-nc-motivo').value.trim();
+        if (motivo.length < 5) { toast('Escribe el motivo de la nota crédito', 'warning'); $('fe-nc-motivo').focus(); return; }
+        const body = { concepto, motivo };
+        let valor = parseFloat(f.total);
+        if (concepto === 1) {
+            for (const c of cantidades()) {
+                if (c.cant > lineas[c.i].disponible) { toast('Hay cantidades mayores a lo disponible', 'warning'); return; }
+            }
+            body.lineas = cantidades().filter(c => c.cant > 0).map(c => ({ id_detalle: lineas[c.i].id_detalle, cantidad: c.cant }));
+            if (!body.lineas.length) { toast('Indica la cantidad a devolver de al menos un producto', 'warning'); return; }
+            valor = totalDevolucion();
+        }
+        const que = concepto === 1 ? `una nota crédito de DEVOLUCIÓN por ${feMoney(valor)}` : `la ANULACIÓN de la factura ${feNumero(f)} por ${feMoney(valor)}`;
+        if (!confirm(`¿Enviar a la DIAN ${que}? Esta acción no se puede deshacer.`)) return;
+
+        $('modal-body').innerHTML = `
             <div class="fe-sending">
                 <div class="fe-sending-icon" style="background:var(--gradient-warm)"><i class="fas fa-file-circle-minus"></i></div>
                 <h3>Enviando Nota Crédito a la DIAN...</h3>
                 <p>Firmando y validando el documento. No cierres esta ventana.</p>
             </div>`;
-        document.getElementById('modal-footer').innerHTML = '';
+        $('modal-footer').innerHTML = '';
 
-        const r = await api(`/facturas/${id}/anular`, { method: 'POST', body: JSON.stringify({ motivo }) });
+        const r = await api(`/facturas/${id}/nota-credito`, { method: 'POST', body: JSON.stringify(body) });
         if (r && !r.error) {
             const n = r.nota || {};
-            document.getElementById('modal-body').innerHTML = `
+            $('modal-body').innerHTML = `
                 <div class="fe-result ok">
                     <div class="fe-result-icon"><i class="fas fa-check"></i></div>
-                    <h3>Factura anulada</h3>
+                    <h3>${concepto === 1 ? 'Devolución registrada' : 'Factura anulada'}</h3>
                     <div class="fe-result-num">${feEsc((n.prefijo || '') + (n.numero || ''))}</div>
-                    <p>Nota Crédito autorizada por la DIAN · ${feMoney(n.total)}</p>
+                    <p>${feEsc(r.mensaje || '')}</p>
                     <div class="fe-cufe">${feEsc(n.cufe || '')}</div>
                 </div>`;
-            document.getElementById('modal-footer').innerHTML = `<button class="btn btn-primary" onclick="closeModal();viewFactura(${id})">Ver factura</button>`;
-            toast(r.mensaje || 'Factura anulada');
+            $('modal-footer').innerHTML = `<button class="btn btn-primary" onclick="closeModal();viewFactura(${id})">Ver factura</button>`;
+            toast(r.mensaje || 'Nota crédito autorizada');
         } else {
             const errores = r?.errores?.length ? r.errores : [];
-            document.getElementById('modal-body').innerHTML = `
+            $('modal-body').innerHTML = `
                 <div class="fe-result bad">
                     <div class="fe-result-icon"><i class="fas fa-xmark"></i></div>
-                    <h3>No se pudo anular</h3>
+                    <h3>No se pudo emitir la nota crédito</h3>
                     <p>${feEsc(r?.mensaje || 'Error desconocido')}</p>
                 </div>
                 ${errores.length ? `<div class="fe-alert danger"><ul>${errores.map(e => `<li>${feEsc(e)}</li>`).join('')}</ul></div>` : ''}`;
-            document.getElementById('modal-footer').innerHTML = `<button class="btn btn-outline" onclick="closeModal();viewFactura(${id})">Cerrar</button>`;
+            $('modal-footer').innerHTML = `<button class="btn btn-outline" onclick="closeModal();viewFactura(${id})">Cerrar</button>`;
         }
     };
 }
