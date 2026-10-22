@@ -895,7 +895,7 @@ window._editarPedido = async (id) => {
     if (!data || data.error) return;
     const p = data.pedido;
 
-    const prodResp = await api('/productos');
+    const [prodResp, preciosEdit] = await Promise.all([api('/productos'), cargarUltimosPrecios(p.id_cliente, id)]);
     const allProductos = prodResp?.productos || [];
 
     let editCart = (p.detalles || []).map(d => ({
@@ -987,7 +987,7 @@ window._editarPedido = async (id) => {
                         ${pr.foto ? `<img src="${UPLOADS_URL}${pr.foto}" style="width:100%;height:100%;object-fit:cover">` : '<i class="fas fa-box" style="color:var(--text-muted);font-size:14px"></i>'}
                     </div>
                     <div style="flex:1;font-size:13px"><strong>${pr.nombre}</strong></div>
-                    <div style="font-size:13px;color:var(--primary);font-weight:700">$${formatNumber(pr.precio)}</div>
+                    <div style="font-size:13px;color:var(--primary);font-weight:700;white-space:nowrap">${precioClienteHTML(pr, preciosEdit)}</div>
                 </div>
             `).join('');
         }, 300));
@@ -1046,6 +1046,7 @@ window._editarPedido = async (id) => {
                                 ${item.tipo_unidad === 'caja' ? `<span style="font-size:10px;background:var(--primary-50);color:var(--primary);padding:2px 6px;border-radius:8px;margin-left:4px;font-weight:700">CAJA</span>` : ''}
                             </div>
                             <div style="font-size:12px;color:var(--text-muted)">$${formatNumber(item.precio_unitario)} / ${item.tipo_unidad === 'caja' ? 'caja' : 'und'}</div>
+                            ${precioRefTag(item)}
                         </div>
                         <div class="qty-control">
                             <button onclick="window._editQty(${i}, -1)">-</button>
@@ -1072,16 +1073,16 @@ window._editarPedido = async (id) => {
         const pr = allProductos.find(x => x.id_producto === idProd);
         if (existing) { existing.cantidad++; }
         else {
-            editCart.push({
+            const nuevo = {
                 id_producto: pr.id_producto,
                 nombre: pr.nombre,
-                precio_unitario: parseFloat(pr.precio),
                 cantidad: 1,
                 foto: pr.foto,
                 tipo_unidad: 'unidad',
                 unidades_por_caja: parseInt(pr.unidades_por_caja) || 1,
-                precio_base: parseFloat(pr.precio),
-            });
+            };
+            aplicarPrecioCliente(nuevo, pr, preciosEdit);
+            editCart.push(nuevo);
         }
         // Se conserva la búsqueda para seguir agregando productos del mismo filtro
         renderEditCart();
@@ -1424,8 +1425,14 @@ async function renderNuevoPedido(forceNew = false) {
             </div>
         `;
 
-        const [data, catResp] = await Promise.all([api('/productos'), api('/catalogos')]);
+        const [data, catResp, preciosCli] = await Promise.all([api('/productos'), api('/catalogos'), cargarUltimosPrecios(state.selectedClient.id_cliente)]);
         if (data) allProductos = data.productos || [];
+        // El precio del carrito siempre corresponde al cliente escogido (por si se cambió de cliente)
+        state.cart.forEach(item => {
+            const prod = allProductos.find(x => x.id_producto === item.id_producto);
+            if (prod) aplicarPrecioCliente(item, prod, preciosCli);
+        });
+        saveCartState();
         const catalogosWiz = (catResp && !catResp.error ? catResp.catalogos : []) || [];
         // Catálogo escogido para este pedido: '' = todos los productos, null = aún no escoge
         let catalogoWiz = sessionStorage.getItem('pc_wiz_catalogo') || '';
@@ -1468,7 +1475,7 @@ async function renderNuevoPedido(forceNew = false) {
                     ${esProductoNuevo(p) ? '<span class="badge-nuevo">NUEVO</span>' : ''}
                     <div class="product-card-body">
                         <h4>${p.nombre}</h4>
-                        <div class="price">$${formatNumber(p.precio)}</div>
+                        <div class="price">${precioClienteHTML(p, preciosCli)}</div>
                         <div class="stock">Stock: ${p.stock} uds</div>
                     </div>
                 </div>
@@ -1483,7 +1490,7 @@ async function renderNuevoPedido(forceNew = false) {
                     <img src="${UPLOADS_URL}${p.foto}" alt="${p.nombre}" style="max-width:100%;max-height:65vh;border-radius:var(--radius);object-fit:contain">
                 </div>
                 <div style="margin-top:14px;text-align:center">
-                    <div style="font-size:22px;font-weight:800;color:var(--primary)">$${formatNumber(p.precio)}</div>
+                    <div style="font-size:22px;font-weight:800;color:var(--primary)">${precioClienteHTML(p, preciosCli)}</div>
                     <div style="font-size:13px;color:var(--text-muted);margin-top:4px">${p.codigo || ''} ${p.codigo ? '•' : ''} Stock: ${p.stock} uds</div>
                     ${p.descripcion ? `<p style="margin-top:10px;font-size:14px;color:var(--text-secondary)">${p.descripcion}</p>` : ''}
                 </div>
@@ -1522,6 +1529,7 @@ async function renderNuevoPedido(forceNew = false) {
                         <div class="cart-item-info" style="flex:1;min-width:0">
                             <h4 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.nombre}</h4>
                             <div class="price">$${formatNumber(item.precio_unitario)} / ${item.tipo_unidad === 'caja' ? 'caja' : 'unidad'}</div>
+                            ${precioRefTag(item)}
                         </div>
                         <button class="cart-item-remove" onclick="window._removeFromCart(${i})"><i class="fas fa-trash-alt"></i></button>
                         <div style="width:100%;display:flex;gap:6px;margin-top:8px">
@@ -1580,17 +1588,17 @@ async function renderNuevoPedido(forceNew = false) {
                 existing.cantidad++;
             } else {
                 const prod = allProductos.find(p => p.id_producto === id);
-                state.cart.push({
+                const nuevo = {
                     id_producto: prod.id_producto,
                     nombre: prod.nombre,
-                    precio_base: parseFloat(prod.precio),
-                    precio_unitario: parseFloat(prod.precio),
                     cantidad: 1,
                     foto: prod.foto,
                     stock: prod.stock,
                     tipo_unidad: 'unidad',
                     unidades_por_caja: parseInt(prod.unidades_por_caja) || 1,
-                });
+                };
+                aplicarPrecioCliente(nuevo, prod, preciosCli);
+                state.cart.push(nuevo);
             }
             saveCartState();
             renderCart();
@@ -1954,6 +1962,57 @@ function openClientModal(callback, editData = null) {
 // PRODUCTOS
 // ========================================
 /** Producto creado en los últimos 15 días */
+// ========================================
+// ÚLTIMO PRECIO VENDIDO AL CLIENTE
+// ========================================
+/** { id_producto: {precio_base, numero_pedido, fecha} }. Se guarda en localStorage para usarlo sin internet. */
+async function cargarUltimosPrecios(idCliente, excluirPedido = null) {
+    if (!idCliente) return {};
+    let cache = {};
+    try { cache = JSON.parse(localStorage.getItem('pc_ult_precios') || '{}'); } catch (e) { }
+    const data = await api(`/clientes/${idCliente}/ultimos-precios${excluirPedido ? '?excluir=' + excluirPedido : ''}`);
+    if (data && !data.error && data.precios) {
+        if (!excluirPedido) {
+            delete cache[idCliente];
+            cache[idCliente] = data.precios;
+            const ids = Object.keys(cache);
+            ids.slice(0, Math.max(0, ids.length - 40)).forEach(k => delete cache[k]); // solo los 40 clientes más recientes
+            try { localStorage.setItem('pc_ult_precios', JSON.stringify(cache)); } catch (e) { }
+        }
+        return data.precios;
+    }
+    return cache[idCliente] || {};
+}
+
+/** Precio por unidad que se le cobra al cliente: el último que se le vendió o, si nunca lo compró, el del inventario */
+function precioCliente(prod, precios) {
+    const u = precios && precios[prod.id_producto];
+    return u ? { precio: parseFloat(u.precio_base), ref: u } : { precio: parseFloat(prod.precio), ref: null };
+}
+
+/** Aplica el precio del cliente a una línea del carrito respetando si va por unidad o por caja */
+function aplicarPrecioCliente(item, prod, precios) {
+    const { precio, ref } = precioCliente(prod, precios);
+    const upc = item.unidades_por_caja > 1 ? item.unidades_por_caja : 1;
+    item.precio_base = precio;
+    item.precio_unitario = item.tipo_unidad === 'caja' ? precio * upc : precio;
+    item.precio_ref = ref ? { numero_pedido: ref.numero_pedido, fecha: ref.fecha } : null;
+}
+
+function precioRefTag(item) {
+    if (item.precio_ref === undefined) return '';
+    return item.precio_ref
+        ? `<div class="precio-ref ultimo" title="Último precio vendido a este cliente (${formatDate(item.precio_ref.fecha)})"><i class="fas fa-clock-rotate-left"></i> Último precio · ${item.precio_ref.numero_pedido}</div>`
+        : `<div class="precio-ref"><i class="fas fa-tag"></i> Precio de inventario</div>`;
+}
+
+function precioClienteHTML(prod, precios) {
+    const { precio, ref } = precioCliente(prod, precios);
+    if (!ref) return `$${formatNumber(precio)}`;
+    const distinto = Math.abs(precio - parseFloat(prod.precio)) > 0.5;
+    return `$${formatNumber(precio)}${distinto ? ` <s class="precio-inv">$${formatNumber(prod.precio)}</s>` : ''}<span class="precio-ult-chip" title="Último precio vendido a este cliente"><i class="fas fa-clock-rotate-left"></i></span>`;
+}
+
 function esProductoNuevo(p) {
     if (!p.created_at) return false;
     return (Date.now() - new Date(String(p.created_at).replace(' ', 'T')).getTime()) < 15 * 86400000;

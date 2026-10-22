@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Cliente;
+use Illuminate\Support\Facades\DB;
 
 class ClienteController extends Controller
 {
@@ -44,6 +45,40 @@ class ClienteController extends Controller
         }
 
         return response()->json(['error' => false, 'cliente' => $cliente]);
+    }
+
+    /**
+     * Último precio de venta de cada producto a este cliente (pedidos no cancelados).
+     * precio_base es por unidad, para que sirva tanto si se vende por unidad como por caja.
+     * ?excluir=id_pedido omite el pedido que se está editando.
+     */
+    public function ultimosPrecios(Request $request, $id)
+    {
+        $filas = DB::table('pc_pedido_detalle as d')
+            ->join('pc_pedidos as p', 'p.id_pedido', '=', 'd.id_pedido')
+            ->where('p.id_cliente', $id)
+            ->where('p.estado', '!=', 'cancelado')
+            ->when($request->excluir, fn($q) => $q->where('p.id_pedido', '!=', (int) $request->excluir))
+            ->orderByDesc('p.created_at')->orderByDesc('d.id_detalle')
+            ->limit(5000)
+            ->get(['d.id_producto', 'd.precio_unitario', 'd.cantidad', 'd.tipo_unidad', 'd.unidades_equivalentes', 'p.numero_pedido', 'p.created_at']);
+
+        $precios = [];
+        foreach ($filas as $f) {
+            if (isset($precios[$f->id_producto])) continue;
+            $porUnidad = $f->tipo_unidad === 'caja' && $f->cantidad > 0 && $f->unidades_equivalentes > 0
+                ? $f->precio_unitario * $f->cantidad / $f->unidades_equivalentes
+                : (float) $f->precio_unitario;
+            $precios[$f->id_producto] = [
+                'precio_base' => round($porUnidad, 2),
+                'precio_unitario' => (float) $f->precio_unitario,
+                'tipo_unidad' => $f->tipo_unidad,
+                'numero_pedido' => $f->numero_pedido,
+                'fecha' => $f->created_at,
+            ];
+        }
+
+        return response()->json(['error' => false, 'precios' => (object) $precios]);
     }
 
     public function store(Request $request)

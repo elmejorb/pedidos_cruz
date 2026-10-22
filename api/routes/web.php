@@ -47,6 +47,7 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
 
     // Clientes
     $router->get('/clientes', 'ClienteController@index');
+    $router->get('/clientes/{id}/ultimos-precios', 'ClienteController@ultimosPrecios');
     $router->get('/clientes/{id}', 'ClienteController@show');
     $router->post('/clientes', 'ClienteController@store');
     $router->put('/clientes/{id}', 'ClienteController@update');
