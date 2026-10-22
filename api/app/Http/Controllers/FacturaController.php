@@ -46,7 +46,23 @@ class FacturaController extends Controller
         $stats = Factura::select('estado', DB::raw('COUNT(*) as cantidad'), DB::raw('SUM(total) as total'))
             ->groupBy('estado')->get()->keyBy('estado');
 
-        return response()->json(['error' => false, 'facturas' => $facturas, 'stats' => $stats]);
+        // Notas crédito autorizadas (se muestran como filas propias en el listado)
+        $notas = [];
+        if (\Illuminate\Support\Facades\Schema::hasTable('pc_notas_credito')) {
+            $n = DB::table('pc_notas_credito as n')
+                ->join('pc_facturas as f', 'f.id_factura', '=', 'n.id_factura')
+                ->leftJoin('pc_pedidos as p', 'p.id_pedido', '=', 'f.id_pedido')
+                ->where('n.estado', 'autorizada')
+                ->select('n.id_nota', 'n.id_factura', 'n.concepto', 'n.prefijo', 'n.numero', 'n.total', 'n.motivo', 'n.cufe',
+                    'n.fecha_emision', 'n.created_at', 'f.prefijo as factura_prefijo', 'f.numero as factura_numero',
+                    'f.cliente_nombre', 'f.cliente_identificacion', 'f.id_pedido', 'p.numero_pedido');
+            if ($request->fecha_desde) $n->whereDate('n.created_at', '>=', $request->fecha_desde);
+            if ($request->fecha_hasta) $n->whereDate('n.created_at', '<=', $request->fecha_hasta);
+            $notas = $n->orderByDesc('n.id_nota')->limit(1000)->get();
+        }
+        $stats['notas'] = ['cantidad' => count($notas), 'total' => collect($notas)->sum('total')];
+
+        return response()->json(['error' => false, 'facturas' => $facturas, 'notas' => $notas, 'stats' => $stats]);
     }
 
     public function show(Request $request, $id)

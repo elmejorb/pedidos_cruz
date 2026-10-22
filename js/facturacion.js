@@ -353,7 +353,7 @@ async function renderFacturas() {
                 <i class="fas fa-search"></i>
             </div>
             <div class="fe-chips" id="fe-chips">
-                ${[['', 'Todas'], ['autorizada', 'Autorizadas'], ['anulada', 'Anuladas'], ['rechazada', 'Rechazadas'], ['error', 'Con error']]
+                ${[['', 'Todas'], ['autorizada', 'Autorizadas'], ['nota', 'Notas crédito'], ['anulada', 'Anuladas'], ['rechazada', 'Rechazadas'], ['error', 'Con error']]
                     .map(([v, l]) => `<button class="fe-chip-filter ${v === '' ? 'active' : ''}" data-estado="${v}">${l}</button>`).join('')}
             </div>
             <input type="date" class="filter-select" id="fe-desde" title="Desde">
@@ -372,10 +372,11 @@ async function renderFacturas() {
 
     let estado = '';
     let facturas = [];
+    let notas = [];
 
     async function cargar() {
         const qs = new URLSearchParams();
-        if (estado) qs.set('estado', estado);
+        if (estado && estado !== 'nota') qs.set('estado', estado);
         const desde = document.getElementById('fe-desde').value;
         const hasta = document.getElementById('fe-hasta').value;
         if (desde) qs.set('fecha_desde', desde);
@@ -386,6 +387,7 @@ async function renderFacturas() {
             return;
         }
         facturas = data.facturas || [];
+        notas = data.notas || [];
         renderStats(data.stats || {});
         renderTabla(filtrar());
     }
@@ -398,21 +400,46 @@ async function renderFacturas() {
                 <div class="stat-info"><h4>Autorizadas</h4><div class="stat-value">${n('autorizada')}</div></div></div>
             <div class="stat-card purple"><div class="stat-icon purple"><i class="fas fa-sack-dollar"></i></div>
                 <div class="stat-info"><h4>Total Facturado</h4><div class="stat-value">$${formatNumber(tot)}</div></div></div>
-            <div class="stat-card orange"><div class="stat-icon orange"><i class="fas fa-triangle-exclamation"></i></div>
-                <div class="stat-info"><h4>Rechazadas / Error</h4><div class="stat-value">${n('rechazada') + n('error')}</div></div></div>
+            <div class="stat-card orange"><div class="stat-icon orange"><i class="fas fa-file-circle-minus"></i></div>
+                <div class="stat-info"><h4>Notas crédito</h4><div class="stat-value">${n('notas')}</div><div class="cr-stat-sub">-${feMoney(s.notas?.total || 0)}</div></div></div>
             <div class="stat-card blue"><div class="stat-icon blue"><i class="fas fa-file-invoice"></i></div>
-                <div class="stat-info"><h4>Total Documentos</h4><div class="stat-value">${Object.values(s).reduce((a, x) => a + parseInt(x.cantidad || 0), 0)}</div></div></div>`;
+                <div class="stat-info"><h4>Rechazadas / Error</h4><div class="stat-value">${n('rechazada') + n('error')}</div></div></div>`;
     }
 
     function filtrar() {
         const t = document.getElementById('fe-buscar').value.toLowerCase().trim();
-        if (!t) return facturas;
-        return facturas.filter(f =>
-            feNumero(f).toLowerCase().includes(t) ||
-            (f.cliente_nombre || '').toLowerCase().includes(t) ||
-            (f.cliente_identificacion || '').includes(t) ||
-            (f.cufe || '').toLowerCase().includes(t) ||
-            (f.pedido?.numero_pedido || '').toLowerCase().includes(t));
+        const filas = [
+            ...(estado === 'nota' ? [] : facturas.map(f => ({ ...f, _tipo: 'factura', _orden: f.fecha_emision || f.created_at }))),
+            ...(estado === '' || estado === 'nota' ? notas.map(n => ({ ...n, _tipo: 'nota', _orden: n.fecha_emision || n.created_at })) : []),
+        ].sort((a, b) => String(b._orden).replace('T', ' ').localeCompare(String(a._orden).replace('T', ' ')));
+        if (!t) return filas;
+        return filas.filter(f => f._tipo === 'nota'
+            ? [(f.prefijo || '') + (f.numero || ''), (f.factura_prefijo || '') + (f.factura_numero || ''), f.cliente_nombre, f.cliente_identificacion, f.numero_pedido, f.cufe]
+                .some(v => String(v || '').toLowerCase().includes(t))
+            : feNumero(f).toLowerCase().includes(t) ||
+              (f.cliente_nombre || '').toLowerCase().includes(t) ||
+              (f.cliente_identificacion || '').includes(t) ||
+              (f.cufe || '').toLowerCase().includes(t) ||
+              (f.pedido?.numero_pedido || '').toLowerCase().includes(t));
+    }
+
+    function filaNota(n) {
+        const dev = +n.concepto === 1;
+        return `
+            <tr class="fe-fila-nc">
+                <td><strong class="fe-num">${feEsc((n.prefijo || '') + (n.numero || ''))}</strong>
+                    <div class="fe-nc-ref"><i class="fas fa-turn-up fa-rotate-90"></i> NC de ${feEsc((n.factura_prefijo || '') + (n.factura_numero || ''))}</div></td>
+                <td>${n.id_pedido ? `<a class="fe-link" onclick="viewPedido(${n.id_pedido})">${feEsc(n.numero_pedido || '#' + n.id_pedido)}</a>` : '-'}</td>
+                <td><div style="font-weight:600">${feEsc(n.cliente_nombre)}</div><div style="font-size:12px;color:var(--text-muted)">${feEsc(n.cliente_identificacion)}</div></td>
+                <td>${formatDate(n.fecha_emision || n.created_at)}</td>
+                <td><span class="fe-nc-tipo ${dev ? 'dev' : 'anu'}">${dev ? 'Devolución' : 'Anulación'}</span></td>
+                <td style="text-align:right"><strong style="color:#B45309">-${feMoney(n.total)}</strong></td>
+                <td><span class="badge-status badge-fe-nota">Nota crédito</span></td>
+                <td style="white-space:nowrap">
+                    <button class="btn btn-ghost btn-sm" onclick="viewFactura(${n.id_factura})" title="Ver factura y nota"><i class="fas fa-eye"></i></button>
+                    <button class="btn btn-ghost btn-sm" onclick="feImprimirCarta(${n.id_factura}, ${n.id_nota})" title="PDF de la nota crédito"><i class="fas fa-file-pdf" style="color:#B45309"></i></button>
+                </td>
+            </tr>`;
     }
 
     function renderTabla(list) {
@@ -421,14 +448,17 @@ async function renderFacturas() {
             tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><i class="fas fa-file-invoice-dollar"></i><h3>Sin facturas</h3><p>Factura un pedido desde su detalle con el botón <strong>Facturar electrónicamente</strong>.</p></div></td></tr>`;
             return;
         }
-        tbody.innerHTML = list.map(f => `
+        tbody.innerHTML = list.map(f => f._tipo === 'nota' ? filaNota(f) : `
             <tr>
                 <td><strong class="fe-num">${feEsc(feNumero(f))}</strong>${f.email_enviado ? ' <i class="fas fa-envelope-circle-check" style="color:var(--success)" title="Enviada por email"></i>' : ''}</td>
                 <td><a class="fe-link" onclick="viewPedido(${f.id_pedido})">${feEsc(f.pedido?.numero_pedido || '#' + f.id_pedido)}</a></td>
                 <td><div style="font-weight:600">${feEsc(f.cliente_nombre)}</div><div style="font-size:12px;color:var(--text-muted)">${feEsc(f.cliente_identificacion)}</div></td>
                 <td>${formatDate(f.fecha_emision || f.created_at)}</td>
                 <td><span style="font-size:12px">${f.forma_pago == 2 ? `Crédito ${f.dias_credito}d` : 'Contado'}</span></td>
-                <td style="text-align:right"><strong>${feMoney(f.total)}</strong></td>
+                <td style="text-align:right"><strong>${feMoney(f.total)}</strong>${(() => {
+                    const dev = notas.filter(n => n.id_factura === f.id_factura && +n.concepto === 1).reduce((s, n) => s + parseFloat(n.total), 0);
+                    return dev > 0 ? `<div class="fe-devuelto">-${feMoney(dev)} devuelto</div>` : '';
+                })()}</td>
                 <td>${feEstadoBadge(f.estado)}</td>
                 <td style="white-space:nowrap">
                     <button class="btn btn-ghost btn-sm" onclick="viewFactura(${f.id_factura})" title="Ver detalle"><i class="fas fa-eye"></i></button>
@@ -528,7 +558,8 @@ async function viewFactura(id, skipHash = false) {
                 ${ncs.map(n => `
                     <div class="card fe-nc-card ${+n.concepto === 1 ? 'devolucion' : ''}" style="margin-bottom:20px">
                         <div class="card-body">
-                            <div class="fe-nc-title"><i class="fas ${+n.concepto === 1 ? 'fa-rotate-left' : 'fa-file-circle-minus'}"></i> Nota Crédito ${feEsc((n.prefijo || '') + (n.numero || ''))} <span class="badge-status badge-fe-autorizada" style="margin-left:6px">Autorizada</span></div>
+                            <div class="fe-nc-title"><i class="fas ${+n.concepto === 1 ? 'fa-rotate-left' : 'fa-file-circle-minus'}"></i> Nota Crédito ${feEsc((n.prefijo || '') + (n.numero || ''))} <span class="badge-status badge-fe-autorizada" style="margin-left:6px">Autorizada</span>
+                                <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="feImprimirCarta(${f.id_factura}, ${n.id_nota})"><i class="fas fa-file-pdf"></i> PDF</button></div>
                             <div class="fe-nc-grid">
                                 <div><span>Concepto</span><strong>${+n.concepto === 1 ? '1 · Devolución de productos' : '2 · Anulación de factura electrónica'}</strong></div>
                                 <div><span>Valor</span><strong>${feMoney(n.total)}</strong></div>
@@ -747,14 +778,20 @@ function feNumeroALetras(valor) {
 }
 
 /** Representación gráfica tamaño carta (diseño clásico con bordes, como la factura impresa anterior) */
-async function feImprimirCarta(id) {
+/** PDF carta de la factura, o de una de sus notas crédito si se pasa idNota (mismo diseño) */
+async function feImprimirCarta(id, idNota = null) {
     const data = await feCargarParaImprimir(id);
     if (!data) return;
     const f = data.factura;
     const e = data.empresa || {};
-    const qr = feQrDataURL(f.cufe, 3);
-    const det = f.detalles || [];
-    const ncA = (f.notas_credito || []).find(n => n.estado === 'autorizada');
+    const nota = idNota ? (f.notas_credito || []).find(n => n.id_nota === idNota && n.estado === 'autorizada') : null;
+    if (idNota && !nota) { toast('La nota crédito no está autorizada', 'warning'); return; }
+    const esNota = !!nota;
+    const qr = feQrDataURL(esNota ? nota.cufe : f.cufe, 3);
+    // Devolución: solo las líneas devueltas. Anulación: todas las de la factura.
+    const det = esNota && (nota.detalles || []).length ? nota.detalles : (f.detalles || []);
+    const ncA = (f.notas_credito || []).find(n => n.estado === 'autorizada' && +n.concepto === 2);
+    const conceptoNC = esNota ? (+nota.concepto === 1 ? '1 - Devolución de parte de los bienes' : '2 - Anulación de factura electrónica') : '';
 
     const n2 = v => parseFloat(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const fechaHora = s => {
@@ -770,18 +807,21 @@ async function feImprimirCarta(id) {
     const tipoDoc = { '13': 'CC', '31': 'NIT', '22': 'CE', '41': 'PA', '42': 'DE' }[f.cliente_tipo_documento] || 'NIT / CC';
     const um = u => ({ unidad: 'UND', caja: 'CAJ', paquete: 'PAC', docena: 'DOC', botella: 'BOT', kilogramo: 'KG', gramo: 'GR', libra: 'LB', litro: 'LT', 'galón': 'GAL', par: 'PAR', metro: 'MT', cada: 'UND' })[String(u || '').toLowerCase()] || String(u || 'UND').substring(0, 3).toUpperCase();
     const iva = det.reduce((s, d) => s + parseFloat(d.iva || 0), 0);
-    const subtotal = parseFloat(f.subtotal || 0);
+    const notaConLineas = esNota && (nota.detalles || []).length;
+    const subtotal = notaConLineas ? det.reduce((s, d) => s + parseFloat(d.base || 0), 0) : parseFloat(f.subtotal || 0);
     const totalFactura = subtotal + iva;
+    const descuento = notaConLineas ? 0 : parseFloat(f.descuento || 0);
+    const totalDoc = esNota ? parseFloat(nota.total || 0) : parseFloat(f.total);
     const formaPago = f.forma_pago == 2 ? `CRÉDITO ${f.dias_credito} días` : 'CONTADO';
     const pref = e.resolucion_prefijo || f.prefijo || '';
-    const resol = e.resolucion_numero
+    const resol = !esNota && e.resolucion_numero
         ? `Resolución DIAN No. ${e.resolucion_numero}${e.resolucion_fecha ? ' del ' + e.resolucion_fecha : ''}${e.resolucion_vigencia ? ' al ' + e.resolucion_vigencia : ''}${e.resolucion_desde ? ` Rango del ${pref}${e.resolucion_desde} al ${pref}${e.resolucion_hasta || ''}` : ''}`
         : '';
     const FILAS_MIN = 18; // altura fija de la tabla, como el formato impreso
 
     const html = `
         <div class="page">
-            ${f.estado === 'anulada' ? `<div class="sello-anulada">ANULADA</div><div class="anulada-nota">Anulada con Nota Crédito ${feEsc(ncA ? (ncA.prefijo || '') + (ncA.numero || '') : '')} · ${feEsc(ncA?.motivo || '')}</div>` : ''}
+            ${!esNota && f.estado === 'anulada' ? `<div class="sello-anulada">ANULADA</div><div class="anulada-nota">Anulada con Nota Crédito ${feEsc(ncA ? (ncA.prefijo || '') + (ncA.numero || '') : '')} · ${feEsc(ncA?.motivo || '')}</div>` : ''}
             <header>
                 <div class="logo">${e.empresa_logo_url ? `<img src="${feEsc(e.empresa_logo_url)}">` : `<div class="logo-txt">${feEsc(e.empresa_nombre || '')}</div>`}</div>
                 <div class="emp">
@@ -811,6 +851,18 @@ async function feImprimirCarta(id) {
                         </table>
                     </td>
                     <td class="col-doc">
+                        ${esNota ? `
+                        <div class="doc-num"><span>Nota Crédito Electrónica:</span><b>${feEsc((nota.prefijo || '') + (nota.numero || ''))}</b></div>
+                        <table class="fechas">
+                            <tr><th>Fecha de Expedición:</th><th>Factura Afectada:</th></tr>
+                            <tr><td>${fechaHora(nota.fecha_emision || nota.created_at)}</td><td><b>${feEsc(feNumero(f))}</b></td></tr>
+                        </table>
+                        <div class="linea"><b>Fecha Factura:</b> ${fechaHora(f.fecha_emision)}</div>
+                        <div class="linea"><b>Concepto:</b> ${feEsc(conceptoNC)}</div>
+                        <div class="linea"><b>Forma de Pago:</b> ${formaPago} &nbsp; ${feEsc(feMedioPago(f.medio_pago))}</div>
+                        <div class="linea"><b>Pedido:</b> ${feEsc(f.pedido?.numero_pedido || '')}</div>
+                        <div class="linea"><b>Moneda Aplicable:</b> COP &nbsp;&nbsp; <b>Tasa Cambio:</b></div>`
+                        : `
                         <div class="doc-num"><span>Factura Electrónica de Venta:</span><b>${feEsc(feNumero(f))}</b></div>
                         <table class="fechas">
                             <tr><th>Fecha de Expedición:</th><th>Fecha de Vencimiento:</th></tr>
@@ -821,7 +873,7 @@ async function feImprimirCarta(id) {
                         <div class="linea"><b>Orden de Compra:</b></div>
                         <div class="linea"><b>Orden de Despacho:</b> ${feEsc(f.pedido?.numero_pedido || '')}</div>
                         <div class="linea"><b>Nro. de Remisión:</b></div>
-                        <div class="linea"><b>Moneda Aplicable:</b> COP &nbsp;&nbsp; <b>Tasa Cambio:</b></div>
+                        <div class="linea"><b>Moneda Aplicable:</b> COP &nbsp;&nbsp; <b>Tasa Cambio:</b></div>`}
                     </td>
                 </tr>
                 <tr><td colspan="2" class="vendedor"><b>Vendedor:</b> ${feEsc((f.pedido?.vendedor?.nombre || f.usuario?.nombre || '').toUpperCase())}</td></tr>
@@ -845,35 +897,37 @@ async function feImprimirCarta(id) {
             <table class="caja pie">
                 <tr>
                     <td class="col-obs">
-                        <div class="obs"><b>Observaciones:</b> ${feEsc(f.nota || '')}</div>
-                        <div class="letras"><b>Valor en Letras:</b> ${feNumeroALetras(parseFloat(f.total))}</div>
+                        <div class="obs"><b>Observaciones:</b> ${esNota
+                            ? `<b>Motivo:</b> ${feEsc(nota.motivo || '')}<br><b>Factura referenciada:</b> ${feEsc(feNumero(f))} del ${fechaHora(f.fecha_emision).substring(0, 10)}<br><b>CUFE factura:</b> <span class="mono">${feEsc(f.cufe)}</span>`
+                            : feEsc(f.nota || '')}</div>
+                        <div class="letras"><b>Valor en Letras:</b> ${feNumeroALetras(totalDoc)}</div>
                     </td>
                     <td class="col-tot">
                         <table class="totales">
                             <tr><th>Subtotal:</th><td>${n2(subtotal)}</td></tr>
-                            <tr><th>Descuento:</th><td>${n2(f.descuento)}</td></tr>
+                            <tr><th>Descuento:</th><td>${n2(descuento)}</td></tr>
                             <tr><th>Impoconsumo:</th><td>0.00</td></tr>
                             <tr><th>IVA:</th><td>${n2(iva)}</td></tr>
-                            <tr class="b"><th>Total Factura:</th><td>${n2(totalFactura)}</td></tr>
+                            <tr class="b"><th>${esNota ? 'Total Nota:' : 'Total Factura:'}</th><td>${n2(totalFactura)}</td></tr>
                             <tr><th>Retefuente:</th><td>0.00</td></tr>
                             <tr><th>ReteIVA:</th><td>0.00</td></tr>
                             <tr><th>Otros Dsctos:</th><td>0.00</td></tr>
-                            <tr class="neto"><th>NETO A PAGAR:</th><td>${n2(f.total)}</td></tr>
+                            <tr class="neto"><th>${esNota ? 'TOTAL NOTA CRÉDITO:' : 'NETO A PAGAR:'}</th><td>${n2(totalDoc)}</td></tr>
                         </table>
                     </td>
                 </tr>
             </table>
 
-            <div class="cufe"><b>CUFE:</b> ${feEsc(f.cufe)}</div>
+            <div class="cufe"><b>${esNota ? 'CUDE' : 'CUFE'}:</b> ${feEsc(esNota ? nota.cufe : f.cufe)}</div>
 
             <table class="final">
                 <tr>
                     <td class="legal">
-                        <div>${feEsc(e.nota_legal || 'La presente factura de venta se asimila en todos sus efectos a una letra de cambio (Código de Comercio Artículo 774 Numeral 5). Causará vencida la fecha de pago intereses de mora máximo permitido por la ley.')}</div>
-                        <div class="software">Elaborado por: Innovación Digital - Software: ContaRs 3.5 - NIT 11.105.169-8 - www.innovacion-digital.com - Representación gráfica de la factura electrónica de venta</div>
+                        <div>${esNota ? 'Documento que corrige la factura electrónica de venta referenciada. Las cantidades y valores aquí indicados se descuentan de dicha factura.' : feEsc(e.nota_legal || 'La presente factura de venta se asimila en todos sus efectos a una letra de cambio (Código de Comercio Artículo 774 Numeral 5). Causará vencida la fecha de pago intereses de mora máximo permitido por la ley.')}</div>
+                        <div class="software">Elaborado por: Innovación Digital - Software: ContaRs 3.5 - NIT 11.105.169-8 - www.innovacion-digital.com - Representación gráfica de la ${esNota ? 'nota crédito electrónica' : 'factura electrónica de venta'}</div>
                     </td>
                     <td class="firma">
-                        <div class="firma-txt">Manifiesto que recibí real y materialmente las mercancías y servicios indicados en esta factura</div>
+                        <div class="firma-txt">${esNota ? 'Recibí la devolución / corrección indicada en esta nota crédito' : 'Manifiesto que recibí real y materialmente las mercancías y servicios indicados en esta factura'}</div>
                         <div class="firma-linea">Nombre, firma, cédula y sello</div>
                     </td>
                 </tr>
@@ -920,6 +974,7 @@ async function feImprimirCarta(id) {
         .totales td{text-align:right;padding:1.6px 0}
         .totales .neto th,.totales .neto td{font-weight:800;font-size:11.5px;border-top:1px solid #000;padding-top:3px}
         .cufe{padding:6px 2px 8px;font-size:10px;word-break:break-all}
+        .mono{font-family:Consolas,monospace;font-size:9px;word-break:break-all}
         .final td{vertical-align:bottom}
         .legal{width:56%;padding-right:14px}
         .legal div:first-child{border:1px solid #000;padding:5px 7px;font-size:9.5px;font-weight:700;background:#f2f2f2;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -931,7 +986,7 @@ async function feImprimirCarta(id) {
         .anulada-nota{background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:6px;padding:5px 10px;margin-bottom:8px;font-weight:700;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}
         @media print{@page{size:letter;margin:9mm}.page{padding:0}}`;
 
-    feAbrirVentana(`FE_${feNumero(f)}`, html, css);
+    feAbrirVentana(esNota ? `NC_${(nota.prefijo || '') + (nota.numero || '')}` : `FE_${feNumero(f)}`, html, css);
 }
 
 async function feImprimirTicket(id) {
@@ -1413,7 +1468,9 @@ async function feAnular(id) {
                     <p>${feEsc(r.mensaje || '')}</p>
                     <div class="fe-cufe">${feEsc(n.cufe || '')}</div>
                 </div>`;
-            $('modal-footer').innerHTML = `<button class="btn btn-primary" onclick="closeModal();viewFactura(${id})">Ver factura</button>`;
+            $('modal-footer').innerHTML = `
+                <button class="btn btn-outline" onclick="feImprimirCarta(${id}, ${n.id_nota})"><i class="fas fa-file-pdf"></i> PDF de la nota</button>
+                <button class="btn btn-primary" onclick="closeModal();viewFactura(${id})">Ver factura</button>`;
             toast(r.mensaje || 'Nota crédito autorizada');
         } else {
             const errores = r?.errores?.length ? r.errores : [];

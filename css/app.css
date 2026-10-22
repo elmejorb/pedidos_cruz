@@ -1842,6 +1842,15 @@ body {
 .fe-devol-resumen .neto { background: var(--gradient); color: #fff; }
 .fe-devol-resumen .neto span { color: rgba(255,255,255,.85); }
 .fe-devuelto { font-size: 11px; color: #B45309; font-weight: 700; }
+.fe-fila-nc { background: #FFFBEB; }
+.fe-fila-nc:hover { background: #FEF3C7 !important; }
+.fe-nc-ref { font-size: 11px; color: #92400E; font-weight: 600; }
+.fe-nc-ref i { margin-right: 3px; font-size: 10px; }
+.fe-nc-tipo { font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 10px; }
+.fe-nc-tipo.dev { background: var(--warning-light); color: #92400E; }
+.fe-nc-tipo.anu { background: var(--danger-light); color: #991B1B; }
+.badge-fe-nota { background: #FEF3C7; color: #92400E; }
+.badge-fe-nota::before { background: var(--warning); }
 .fe-nc-tabla { border: 1px solid var(--border); border-radius: var(--radius); max-height: 260px; overflow-y: auto; }
 .fe-nc-fila { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--border-light); }
 .fe-nc-fila.agotada { opacity: .55; }
