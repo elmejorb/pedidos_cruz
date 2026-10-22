@@ -205,6 +205,7 @@ class PedidoController extends Controller
             'items' => 'required|array|min:1',
             'items.*.id_producto' => 'required|integer|exists:pc_productos,id_producto',
             'items.*.cantidad' => 'required|integer|min:1',
+            'items.*.precio_unitario' => 'nullable|numeric|min:0|max:999999999',
         ]);
 
         $usuario = $request->usuario;
@@ -364,6 +365,7 @@ class PedidoController extends Controller
             'items' => 'required|array|min:1',
             'items.*.id_producto' => 'required|integer|exists:pc_productos,id_producto',
             'items.*.cantidad' => 'required|integer|min:1',
+            'items.*.precio_unitario' => 'nullable|numeric|min:0|max:999999999',
         ]);
 
         $pedido = Pedido::find($id);

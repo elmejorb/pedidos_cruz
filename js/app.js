@@ -1089,8 +1089,16 @@ window._editarPedido = async (id) => {
                                 ${item.nombre}
                                 ${item.tipo_unidad === 'caja' ? `<span style="font-size:10px;background:var(--primary-50);color:var(--primary);padding:2px 6px;border-radius:8px;margin-left:4px;font-weight:700">CAJA</span>` : ''}
                             </div>
-                            <div style="font-size:12px;color:var(--text-muted)">$${formatNumber(item.precio_unitario)} / ${item.tipo_unidad === 'caja' ? 'caja' : 'und'}</div>
-                            ${precioRefTag(item)}
+                            <label class="ep-precio" title="Precio de venta (puedes cambiarlo)">
+                                <span>$</span>
+                                <input type="number" min="0" step="any" inputmode="decimal" value="${Math.round(item.precio_unitario * 100) / 100}"
+                                    onfocus="this.select()" onchange="window._editSetPrecio(${i}, this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+                                <small>/ ${item.tipo_unidad === 'caja' ? 'caja' : 'und'}</small>
+                                <i class="fas fa-pen"></i>
+                            </label>
+                            ${item.precio_manual
+                                ? `<div class="precio-ref editado"><i class="fas fa-pen-to-square"></i> Precio editado${item.precio_previo != null ? ` · antes $${formatNumber(item.precio_previo)}` : ''}</div>`
+                                : precioRefTag(item)}
                         </div>
                         <div class="qty-control">
                             <button onclick="window._editQty(${i}, -1)">-</button>
@@ -1135,12 +1143,26 @@ window._editarPedido = async (id) => {
     window._editQty = (i, d) => { editCart[i].cantidad = Math.max(1, editCart[i].cantidad + d); renderEditCart(); };
     window._editSetQty = (i, v) => { editCart[i].cantidad = Math.max(1, parseInt(v) || 1); renderEditCart(); };
     window._editRemove = (i) => { editCart.splice(i, 1); renderEditCart(); };
+    window._editSetPrecio = (i, v) => {
+        const item = editCart[i];
+        const precio = parseFloat(String(v).replace(',', '.'));
+        if (isNaN(precio) || precio < 0) { toast('Escribe un precio válido', 'warning'); return renderEditCart(); }
+        if (Math.abs(precio - item.precio_unitario) < 0.005) return;
+        const upc = item.tipo_unidad === 'caja' && item.unidades_por_caja > 1 ? item.unidades_por_caja : 1;
+        if (!item.precio_manual) item.precio_previo = item.precio_unitario;
+        item.precio_unitario = precio;
+        item.precio_base = precio / upc; // así, al cambiar Unidad/Caja, se respeta el precio editado
+        item.precio_manual = true;
+        renderEditCart();
+        if (precio === 0) toast('Quedó en $0: el producto saldrá sin costo para el cliente', 'warning');
+    };
     window._editToggleTipo = (i, tipo) => {
         const item = editCart[i];
         if (item.tipo_unidad === tipo) return;
         const upc = item.unidades_por_caja && item.unidades_por_caja > 1 ? item.unidades_por_caja : 1;
         item.tipo_unidad = tipo;
         item.precio_unitario = tipo === 'caja' ? item.precio_base * upc : item.precio_base;
+        if (item.precio_previo != null) item.precio_previo = tipo === 'caja' ? item.precio_previo * upc : item.precio_previo / upc;
         renderEditCart();
     };
 
