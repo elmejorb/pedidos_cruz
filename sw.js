@@ -6,7 +6,7 @@
    Los envíos (POST) NO pasan por aquí: la cola de pendientes vive en offline.js
    ======================================== */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const STATIC = 'pc-static-' + VERSION;
 const API_CACHE = 'pc-api';
 const IMG_CACHE = 'pc-img';
@@ -66,6 +66,7 @@ self.addEventListener('fetch', event => {
     const req = event.request;
     if (req.method !== 'GET') return;
     const url = req.url;
+    if (url.includes('__version_check')) return; // aviso de nueva versión: siempre al servidor
 
     if (url.startsWith(API_BASE + '/uploads/')) {
         event.respondWith(cacheFirst(req, IMG_CACHE));

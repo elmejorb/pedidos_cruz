@@ -3673,3 +3673,71 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.token) handleHashRoute();
     });
 });
+
+// ========================================
+// AVISO DE NUEVA VERSIÓN
+// Cada publicación sube los ?v= de index.html; si los del servidor cambian, se invita a recargar.
+// ========================================
+const ACT = { firma: null, avisada: null, ocultaHasta: 0, CADA_MS: 3 * 60 * 1000, POSPONER_MS: 30 * 60 * 1000 };
+
+function firmaVersiones(doc) {
+    return [...doc.querySelectorAll('script[src*="?v="], link[href*="?v="]')]
+        .map(e => e.getAttribute('src') || e.getAttribute('href')).sort().join('|');
+}
+
+async function revisarActualizacion() {
+    if (!ACT.firma || !navigator.onLine || document.hidden) return;
+    try {
+        // __version_check hace que el service worker no lo intercepte (siempre va al servidor)
+        const r = await fetch(`index.html?__version_check=${Date.now()}`, { cache: 'no-store' });
+        if (!r.ok) return;
+        const nueva = firmaVersiones(new DOMParser().parseFromString(await r.text(), 'text/html'));
+        if (!nueva || nueva === ACT.firma) return;
+        if (nueva === ACT.avisada && Date.now() < ACT.ocultaHasta) return;
+        ACT.avisada = nueva;
+        mostrarAvisoActualizacion();
+    } catch (e) { /* sin señal: se revisa en el próximo intento */ }
+}
+
+function mostrarAvisoActualizacion() {
+    if (document.getElementById('update-toast')) return;
+    const editando = document.getElementById('modal-overlay')?.classList.contains('show');
+    const el = document.createElement('div');
+    el.id = 'update-toast';
+    el.className = 'update-toast';
+    el.setAttribute('role', 'status');
+    el.innerHTML = `
+        <div class="update-icon"><i class="fas fa-rocket"></i></div>
+        <div class="update-txt">
+            <b>¡Hay una nueva versión!</b>
+            <span>Actualiza la aplicación para tener las últimas mejoras.${editando ? '<br><em>Si estás editando algo, guárdalo antes.</em>' : ''}</span>
+        </div>
+        <div class="update-actions">
+            <button class="btn btn-ghost btn-sm" data-a="luego">Más tarde</button>
+            <button class="btn btn-primary btn-sm" data-a="ya"><i class="fas fa-rotate-right"></i> Actualizar</button>
+        </div>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+
+    el.querySelector('[data-a="luego"]').onclick = () => {
+        ACT.ocultaHasta = Date.now() + ACT.POSPONER_MS;
+        el.classList.remove('show');
+        setTimeout(() => el.remove(), 250);
+    };
+    el.querySelector('[data-a="ya"]').onclick = async () => {
+        el.querySelector('[data-a="ya"]').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Actualizando...';
+        try {
+            const reg = await navigator.serviceWorker?.getRegistration();
+            await Promise.race([reg?.update(), new Promise(r => setTimeout(r, 2500))]);
+        } catch (e) { }
+        location.reload();
+    };
+}
+
+window.addEventListener('load', () => {
+    ACT.firma = firmaVersiones(document);
+    setTimeout(revisarActualizacion, 20000);
+    setInterval(revisarActualizacion, ACT.CADA_MS);
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) revisarActualizacion(); });
+window.addEventListener('online', revisarActualizacion);
