@@ -370,7 +370,7 @@ async function renderFacturas() {
                 <i class="fas fa-search"></i>
             </div>
             <div class="fe-chips" id="fe-chips">
-                ${[['', 'Todas'], ['autorizada', 'Autorizadas'], ['nota', 'Notas crédito'], ['anulada', 'Anuladas'], ['rechazada', 'Rechazadas'], ['error', 'Con error']]
+                ${[['', 'Todas'], ['facturas', 'Facturas'], ['autorizada', 'Autorizadas'], ['nota', 'Notas crédito'], ['anulada', 'Anuladas'], ['rechazada', 'Rechazadas'], ['error', 'Con error']]
                     .map(([v, l]) => `<button class="fe-chip-filter ${v === '' ? 'active' : ''}" data-estado="${v}">${l}</button>`).join('')}
             </div>
             <input type="date" class="filter-select" id="fe-desde" title="Desde">
@@ -393,7 +393,7 @@ async function renderFacturas() {
 
     async function cargar() {
         const qs = new URLSearchParams();
-        if (estado && estado !== 'nota') qs.set('estado', estado);
+        if (estado && estado !== 'nota' && estado !== 'facturas') qs.set('estado', estado); // 'nota' y 'facturas' se filtran aquí
         const desde = document.getElementById('fe-desde').value;
         const hasta = document.getElementById('fe-hasta').value;
         if (desde) qs.set('fecha_desde', desde);
