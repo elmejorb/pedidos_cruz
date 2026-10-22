@@ -132,7 +132,7 @@ async function openProductModal(callback, editData = null, categorias = []) {
                         <div class="pm-chips" id="m-prod-catalogos">
                             ${CAT.catalogos.map(c => `<button type="button" class="pm-chip ${enCatalogos.has(c.id_catalogo) ? 'on' : ''}" data-id="${c.id_catalogo}" style="--c:${c.color}"><i class="fas fa-check"></i>${catEsc(c.nombre)}</button>`).join('')}
                         </div>
-                        <div class="pm-hint">Los vendedores con catálogo asignado solo ven los productos de sus catálogos.</div>`
+                        <div class="pm-hint">En el Nuevo Pedido el vendedor escoge qué catálogo mostrar.</div>`
                     : `<div class="pm-hint">Aún no hay catálogos. Créalos en <a class="fe-link" onclick="closeModal();navigateTo('catalogos')">Catálogos</a>.</div>`}
                 </div>
             </section>
@@ -235,9 +235,9 @@ async function renderCatalogos() {
 
     if (!admin) {
         container.innerHTML = `
-            <div class="cat-intro fade-in"><i class="fas fa-share-nodes"></i><div><strong>Comparte tu catálogo con tus clientes</strong><span>Solo verán los productos de este catálogo, con sus precios y fotos.</span></div></div>
+            <div class="cat-intro fade-in"><i class="fas fa-share-nodes"></i><div><strong>Comparte un catálogo con tus clientes</strong><span>Solo verán los productos de ese catálogo, con sus precios y fotos. En el Nuevo Pedido también puedes escoger qué catálogo mostrar.</span></div></div>
             ${CAT.catalogos.length ? `<div class="cat-grid fade-in">${CAT.catalogos.map(c => catCard(c, false)).join('')}</div>`
-                : '<div class="empty-state"><i class="fas fa-book-open"></i><h3>No tienes catálogos asignados</h3><p>El administrador te asignará los catálogos que puedes mostrar.</p></div>'}`;
+                : '<div class="empty-state"><i class="fas fa-book-open"></i><h3>Aún no hay catálogos</h3><p>El administrador todavía no ha creado catálogos.</p></div>'}`;
         return;
     }
 
@@ -283,7 +283,6 @@ async function renderCatalogos() {
 }
 
 function catCard(c, admin) {
-    const vend = c.vendedores || [];
     return `
         <div class="cat-card" style="--c:${c.color}">
             <div class="cat-card-head">
@@ -295,9 +294,7 @@ function catCard(c, admin) {
             </div>
             <div class="cat-card-stats">
                 <div><strong>${c.productos_count ?? 0}</strong><span>productos</span></div>
-                ${admin ? `<div><strong>${vend.length}</strong><span>vendedor${vend.length === 1 ? '' : 'es'}</span></div>` : ''}
             </div>
-            ${admin ? `<div class="cat-card-vend">${vend.length ? vend.map(v => `<span><i class="fas fa-user"></i>${catEsc(v.nombre)}</span>`).join('') : '<em>Sin vendedores asignados</em>'}</div>` : ''}
             <div class="cat-card-share">
                 <button class="btn btn-sm cat-wa" onclick="catCompartirId(${c.id_catalogo}, 'whatsapp')"><i class="fab fa-whatsapp"></i> WhatsApp</button>
                 <button class="btn btn-outline btn-sm" onclick="catCompartirId(${c.id_catalogo}, 'copiar')"><i class="fas fa-link"></i> Copiar enlace</button>
@@ -314,33 +311,24 @@ function catCard(c, admin) {
 
 async function catEditar(id) {
     const c = id ? CAT.catalogos.find(x => x.id_catalogo === id) : { nombre: '', descripcion: '', color: '#6366F1', vendedores: [] };
-    const usr = await api('/auth/usuarios');
-    const vendedores = (usr?.usuarios || []).filter(u => u.rol === 'vendedor' && +u.activo !== 0);
-    const asignados = new Set((c.vendedores || []).map(v => v.id_usuario));
 
     openModal(id ? 'Editar catálogo' : 'Nuevo catálogo', `
         <div class="form-group"><label>Nombre *</label><input type="text" id="cat-nombre" value="${catEsc(c.nombre)}" placeholder="Ej: Dulces La Fama"></div>
         <div class="form-group"><label>Descripción <small>(la ve el cliente)</small></label><input type="text" id="cat-desc" value="${catEsc(c.descripcion || '')}" placeholder="Opcional"></div>
         <div class="form-group"><label>Color</label>${colorPickerHTML('cat-color', c.color)}</div>
-        <div class="form-group" style="margin-bottom:0"><label>Vendedores que pueden mostrar este catálogo</label>
-            ${vendedores.length ? `<div class="pm-chips" id="cat-vendedores">${vendedores.map(v => `<button type="button" class="pm-chip ${asignados.has(v.id_usuario) ? 'on' : ''}" data-id="${v.id_usuario}" style="--c:var(--primary)"><i class="fas fa-check"></i>${catEsc(v.nombre)}</button>`).join('')}</div>`
-                : '<div class="pm-hint">No hay vendedores registrados.</div>'}
-            <div class="pm-hint">Un vendedor con catálogos asignados solo ve en la app los productos de esos catálogos.</div>
-        </div>
+        <div class="pm-hint" style="margin-top:0"><i class="fas fa-circle-info"></i> Todos los vendedores pueden usar este catálogo: lo escogen en el Nuevo Pedido antes de mostrar los productos, o lo comparten por enlace.</div>
         ${id ? `<label class="fe-check" style="margin-top:14px"><input type="checkbox" id="cat-nuevo-codigo"> Generar un enlace nuevo (el anterior deja de funcionar)</label>` : ''}
     `, `
         <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
         <button class="btn btn-primary" id="cat-guardar"><i class="fas fa-save"></i> Guardar</button>
     `);
     initColorPicker('cat-color');
-    document.getElementById('cat-vendedores')?.addEventListener('click', e => { const b = e.target.closest('.pm-chip'); if (b) b.classList.toggle('on'); });
 
     document.getElementById('cat-guardar').onclick = async () => {
         const body = {
             nombre: document.getElementById('cat-nombre').value.trim(),
             descripcion: document.getElementById('cat-desc').value.trim() || null,
             color: getColorPickerValue('cat-color'),
-            vendedores: [...document.querySelectorAll('#cat-vendedores .pm-chip.on')].map(b => parseInt(b.dataset.id)),
             nuevo_codigo: !!document.getElementById('cat-nuevo-codigo')?.checked,
         };
         if (!body.nombre) { toast('El nombre es requerido', 'warning'); return; }
@@ -356,7 +344,7 @@ async function catEditar(id) {
 
 async function catEliminar(id) {
     const c = CAT.catalogos.find(x => x.id_catalogo === id);
-    if (!confirm(`¿Eliminar el catálogo "${c?.nombre}"? Los productos no se borran; su enlace dejará de funcionar y sus vendedores volverán a ver todos los productos si no tienen otro catálogo.`)) return;
+    if (!confirm(`¿Eliminar el catálogo "${c?.nombre}"? Los productos no se borran; solo deja de existir el catálogo y su enlace.`)) return;
     const r = await api(`/catalogos/${id}`, { method: 'DELETE' });
     if (r && !r.error) { toast('Catálogo eliminado'); renderCatalogos(); } else toast(r?.mensaje || 'Error', 'error');
 }

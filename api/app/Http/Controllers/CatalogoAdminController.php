@@ -28,9 +28,6 @@ class CatalogoAdminController extends Controller
             ->withCount('productos')
             ->with('vendedores:pc_usuarios.id_usuario,nombre');
 
-        if ($u->rol !== 'admin') {
-            $q->whereHas('vendedores', fn($v) => $v->where('pc_usuarios.id_usuario', $u->id_usuario));
-        }
 
         return response()->json([
             'error' => false,

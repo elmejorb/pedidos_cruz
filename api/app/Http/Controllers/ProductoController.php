@@ -22,7 +22,7 @@ class ProductoController extends Controller
     private function presentar($productos, $usuario)
     {
         $admin = $usuario && $usuario->rol === 'admin';
-        if ($admin && Catalogo::habilitado()) {
+        if (Catalogo::habilitado()) {
             $map = DB::table('pc_catalogo_producto')
                 ->whereIn('id_producto', $productos->pluck('id_producto'))
                 ->get()->groupBy('id_producto');

@@ -24,6 +24,7 @@ function saveCartState() {
 }
 
 function clearCartState() {
+    sessionStorage.removeItem('pc_wiz_catalogo');
     state.cart = [];
     state.selectedClient = null;
     state.selectedRuta = null;
@@ -1394,6 +1395,7 @@ async function renderNuevoPedido(forceNew = false) {
                         <h3><i class="fas fa-box-open" style="color:var(--primary);margin-right:8px"></i>Productos</h3>
                     </div>
                     <div class="card-body">
+                        <div id="wiz-catalogo-bar"></div>
                         <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
                             <div class="search-box" style="flex:1;min-width:180px">
                                 <input type="text" id="search-prods-wizard" placeholder="Buscar producto...">
@@ -1422,11 +1424,67 @@ async function renderNuevoPedido(forceNew = false) {
             </div>
         `;
 
-        const data = await api('/productos');
+        const [data, catResp] = await Promise.all([api('/productos'), api('/catalogos')]);
         if (data) allProductos = data.productos || [];
+        const catalogosWiz = (catResp && !catResp.error ? catResp.catalogos : []) || [];
+        // Catálogo escogido para este pedido: '' = todos los productos, null = aún no escoge
+        let catalogoWiz = sessionStorage.getItem('pc_wiz_catalogo');
+        if (catalogoWiz !== null && catalogoWiz !== '' && !catalogosWiz.some(c => String(c.id_catalogo) === catalogoWiz)) catalogoWiz = null;
+
+        function renderCatalogoBar() {
+            const bar = document.getElementById('wiz-catalogo-bar');
+            if (!bar) return;
+            if (!catalogosWiz.length) { bar.innerHTML = ''; return; }
+            const actual = catalogosWiz.find(c => String(c.id_catalogo) === catalogoWiz);
+            bar.innerHTML = `
+                <div class="wiz-cat-bar">
+                    <span class="wiz-cat-label"><i class="fas fa-book-open"></i> Catálogo:</span>
+                    <button class="wiz-cat-chip ${catalogoWiz === '' ? 'on' : ''}" data-id="" style="--c:var(--primary)">Todos</button>
+                    ${catalogosWiz.map(c => `<button class="wiz-cat-chip ${String(c.id_catalogo) === catalogoWiz ? 'on' : ''}" data-id="${c.id_catalogo}" style="--c:${c.color}">${c.nombre}</button>`).join('')}
+                </div>
+                ${actual ? `<div class="wiz-cat-actual" style="--c:${actual.color}">Mostrando el catálogo <b>${actual.nombre}</b></div>` : ''}`;
+            bar.querySelectorAll('.wiz-cat-chip').forEach(b => b.onclick = () => elegirCatalogo(b.dataset.id));
+        }
+
+        function elegirCatalogo(id) {
+            catalogoWiz = id;
+            sessionStorage.setItem('pc_wiz_catalogo', id);
+            renderCatalogoBar();
+            renderProducts(getFilteredWizardProducts());
+        }
+
+        /** Antes de mostrar productos: escoger qué catálogo mostrarle al cliente */
+        function renderSelectorCatalogo() {
+            const grid = document.getElementById('products-grid');
+            const cuenta = id => allProductos.filter(p => (p.catalogos || []).includes(id)).length;
+            grid.classList.add('wiz-cat-picker-grid');
+            grid.innerHTML = `
+                <div class="wiz-cat-picker">
+                    <div class="wiz-cat-picker-title"><i class="fas fa-book-open"></i> ¿Qué catálogo le vas a mostrar al cliente?</div>
+                    <div class="wiz-cat-picker-list">
+                        ${catalogosWiz.map(c => `
+                            <button class="wiz-cat-option" data-id="${c.id_catalogo}" style="--c:${c.color}">
+                                <span class="wiz-cat-option-icon"><i class="fas fa-book-open"></i></span>
+                                <span class="wiz-cat-option-txt"><strong>${c.nombre}</strong><small>${cuenta(c.id_catalogo)} producto${cuenta(c.id_catalogo) === 1 ? '' : 's'}${c.descripcion ? ' · ' + c.descripcion : ''}</small></span>
+                                <i class="fas fa-chevron-right"></i>
+                            </button>`).join('')}
+                        <button class="wiz-cat-option todos" data-id="" style="--c:#64748B">
+                            <span class="wiz-cat-option-icon"><i class="fas fa-layer-group"></i></span>
+                            <span class="wiz-cat-option-txt"><strong>Todos los productos</strong><small>${allProductos.length} productos</small></span>
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>`;
+            grid.querySelectorAll('.wiz-cat-option').forEach(b => b.onclick = () => { grid.classList.remove('wiz-cat-picker-grid'); elegirCatalogo(b.dataset.id); });
+        }
 
         function renderProducts(productos) {
             const grid = document.getElementById('products-grid');
+            if (catalogosWiz.length && catalogoWiz === null) { renderSelectorCatalogo(); return; }
+            if (!productos.length) {
+                grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><i class="fas fa-box-open"></i><p>No hay productos en este catálogo con esa búsqueda</p></div>';
+                return;
+            }
             grid.innerHTML = productos.map(p => `
                 <div class="product-card ${state.cart.find(c => c.id_producto === p.id_producto) ? 'selected' : ''}" onclick="window._addToCart(${p.id_producto})">
                     <div class="product-card-img" style="position:relative">
@@ -1519,6 +1577,7 @@ async function renderNuevoPedido(forceNew = false) {
             `;
         }
 
+        renderCatalogoBar();
         renderProducts(getFilteredWizardProducts());
         renderCart();
 
@@ -1533,7 +1592,8 @@ async function renderNuevoPedido(forceNew = false) {
         function getFilteredWizardProducts() {
             const term = (document.getElementById('search-prods-wizard')?.value || '').toLowerCase();
             const orden = document.getElementById('sort-prods-wizard')?.value || 'reciente';
-            const lista = !term ? allProductos : allProductos.filter(p =>
+            const base = catalogoWiz ? allProductos.filter(p => (p.catalogos || []).includes(parseInt(catalogoWiz))) : allProductos;
+            const lista = !term ? base : base.filter(p =>
                 p.nombre.toLowerCase().includes(term) ||
                 (p.codigo || '').toLowerCase().includes(term)
             );

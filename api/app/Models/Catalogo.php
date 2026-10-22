@@ -32,11 +32,13 @@ class Catalogo extends Model
     }
 
     /**
-     * IDs de productos que puede ver un vendedor, o null si no tiene restricción
-     * (vendedor sin catálogos asignados = ve todo, como antes).
+     * Restricción de productos por vendedor: DESACTIVADA (2026-10-21).
+     * Ahora el vendedor ve todo y escoge qué catálogo mostrar antes de listar
+     * los productos. Se conserva la lógica por si se vuelve a necesitar.
      */
     public static function productosPermitidos($usuario): ?array
     {
+        return null;
         if (!$usuario || $usuario->rol === 'admin' || !self::habilitado()) return null;
 
         $catalogos = DB::table('pc_catalogo_vendedor as cv')
