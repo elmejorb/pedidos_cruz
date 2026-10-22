@@ -58,10 +58,20 @@ class FacturaController extends Controller
         $factura = Factura::with($rel)->find($id);
         if (!$factura) return response()->json(['error' => true, 'mensaje' => 'Factura no encontrada'], 404);
 
+        // Datos extra para el PDF: departamento del cliente (del JSON enviado) y ciudad de la empresa
+        $req = json_decode($factura->getAttributes()['request_json'] ?? '', true);
+        $factura->setAttribute('cliente_departamento', $req['customer']['municipality']['department']['name'] ?? null);
+        $empresa = ConfigFe::actual();
+        $ciudad = $empresa->id_municipio_default ? DB::table('pc_dian_municipios as m')
+            ->join('pc_dian_departamentos as d', 'd.id', '=', 'm.department_id')
+            ->where('m.id', $empresa->id_municipio_default)
+            ->selectRaw("CONCAT(TRIM(m.name), ' - ', TRIM(d.name)) as ciudad")->value('ciudad') : null;
+
         return response()->json([
             'error' => false,
             'factura' => $factura,
-            'empresa' => ConfigFe::actual(),
+            'empresa' => $empresa,
+            'empresa_ciudad' => $ciudad,
         ]);
     }
 

@@ -705,143 +705,221 @@ function feAbrirVentana(titulo, html, css) {
     win.document.close();
 }
 
+/** Número a letras en español (pesos colombianos) */
+function feNumeroALetras(valor) {
+    const U = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE', 'DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE',
+        'DIECISEIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE', 'VEINTE', 'VEINTIUN', 'VEINTIDOS', 'VEINTITRES', 'VEINTICUATRO', 'VEINTICINCO',
+        'VEINTISEIS', 'VEINTISIETE', 'VEINTIOCHO', 'VEINTINUEVE'];
+    const D = ['', '', '', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
+    const C = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+    const decenas = n => n < 30 ? U[n] : D[Math.floor(n / 10)] + (n % 10 ? ' Y ' + U[n % 10] : '');
+    const centenas = n => {
+        if (n === 100) return 'CIEN';
+        const c = Math.floor(n / 100), r = n % 100;
+        return [C[c], decenas(r)].filter(Boolean).join(' ');
+    };
+    const miles = n => {
+        const m = Math.floor(n / 1000), r = n % 1000;
+        const pre = m === 0 ? '' : m === 1 ? 'MIL' : centenas(m) + ' MIL';
+        return [pre, centenas(r)].filter(Boolean).join(' ');
+    };
+    const entero = Math.floor(Math.abs(valor));
+    const centavos = Math.round((Math.abs(valor) - entero) * 100);
+    let txt;
+    if (entero === 0) txt = 'CERO';
+    else {
+        const mill = Math.floor(entero / 1000000), r = entero % 1000000;
+        const pre = mill === 0 ? '' : mill === 1 ? 'UN MILLON' : miles(mill) + ' MILLONES';
+        txt = [pre, miles(r)].filter(Boolean).join(' ');
+        if (r === 0 && mill > 0) txt += ' DE';
+    }
+    return `${txt} PESOS${centavos ? ` CON ${decenas(centavos) || centavos} CENTAVOS` : ''}`.replace(/\s+/g, ' ').trim();
+}
+
+/** Representación gráfica tamaño carta (diseño clásico con bordes, como la factura impresa anterior) */
 async function feImprimirCarta(id) {
     const data = await feCargarParaImprimir(id);
     if (!data) return;
     const f = data.factura;
     const e = data.empresa || {};
-    const qr = feQrDataURL(f.cufe, 4);
-    const ivas = feResumenIva(f.detalles || []);
-    const resol = feTextoResolucion(e);
-    const fecha = (f.fecha_emision || '').replace('T', ' ').substring(0, 19);
-
+    const qr = feQrDataURL(f.cufe, 3);
+    const det = f.detalles || [];
     const ncA = (f.notas_credito || []).find(n => n.estado === 'autorizada');
+
+    const n2 = v => parseFloat(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fechaHora = s => {
+        if (!s) return '';
+        if (/T.*(Z|[+-]\d\d:?\d\d)$/.test(String(s))) { // ISO con zona (ej. created_at en UTC) -> hora local
+            const x = new Date(s), z = n => String(n).padStart(2, '0');
+            return `${z(x.getDate())}-${z(x.getMonth() + 1)}-${x.getFullYear()} ${z(x.getHours())}:${z(x.getMinutes())}`;
+        }
+        const [d, t] = String(s).replace('T', ' ').split(' ');
+        const [y, m, dd] = d.split('-');
+        return `${dd}-${m}-${y}${t ? ' ' + t.substring(0, 5) : ''}`;
+    };
+    const tipoDoc = { '13': 'CC', '31': 'NIT', '22': 'CE', '41': 'PA', '42': 'DE' }[f.cliente_tipo_documento] || 'NIT / CC';
+    const um = u => ({ unidad: 'UND', caja: 'CAJ', paquete: 'PAC', docena: 'DOC', botella: 'BOT', kilogramo: 'KG', gramo: 'GR', libra: 'LB', litro: 'LT', 'galón': 'GAL', par: 'PAR', metro: 'MT', cada: 'UND' })[String(u || '').toLowerCase()] || String(u || 'UND').substring(0, 3).toUpperCase();
+    const iva = det.reduce((s, d) => s + parseFloat(d.iva || 0), 0);
+    const subtotal = parseFloat(f.subtotal || 0);
+    const totalFactura = subtotal + iva;
+    const formaPago = f.forma_pago == 2 ? `CRÉDITO ${f.dias_credito} días` : 'CONTADO';
+    const pref = e.resolucion_prefijo || f.prefijo || '';
+    const resol = e.resolucion_numero
+        ? `Resolución DIAN No. ${e.resolucion_numero}${e.resolucion_fecha ? ' del ' + e.resolucion_fecha : ''}${e.resolucion_vigencia ? ' al ' + e.resolucion_vigencia : ''}${e.resolucion_desde ? ` Rango del ${pref}${e.resolucion_desde} al ${pref}${e.resolucion_hasta || ''}` : ''}`
+        : '';
+    const FILAS_MIN = 18; // altura fija de la tabla, como el formato impreso
+
     const html = `
         <div class="page">
             ${f.estado === 'anulada' ? `<div class="sello-anulada">ANULADA</div><div class="anulada-nota">Anulada con Nota Crédito ${feEsc(ncA ? (ncA.prefijo || '') + (ncA.numero || '') : '')} · ${feEsc(ncA?.motivo || '')}</div>` : ''}
             <header>
+                <div class="logo">${e.empresa_logo_url ? `<img src="${feEsc(e.empresa_logo_url)}">` : `<div class="logo-txt">${feEsc(e.empresa_nombre || '')}</div>`}</div>
                 <div class="emp">
-                    ${e.empresa_logo_url ? `<img src="${feEsc(e.empresa_logo_url)}" class="logo">` : ''}
-                    <div>
-                        <div class="emp-name">${feEsc(e.empresa_nombre || 'Mi Empresa')}</div>
-                        ${e.empresa_propietario ? `<div class="emp-own">${feEsc(e.empresa_propietario)}</div>` : ''}
-                        <div>NIT ${feEsc(e.empresa_nit || '')}</div>
-                        <div>${feEsc(e.empresa_direccion || '')}</div>
-                        <div>${e.empresa_telefono ? 'Tel: ' + feEsc(e.empresa_telefono) : ''}${e.empresa_email ? ' · ' + feEsc(e.empresa_email) : ''}</div>
-                    </div>
+                    <div class="emp-nombre">${feEsc(e.empresa_nombre || '')}${e.empresa_propietario ? '- ' + feEsc(e.empresa_propietario) : ''}</div>
+                    <div><b>NIT: ${feEsc(e.empresa_nit || '')}</b></div>
+                    ${e.empresa_direccion ? `<div>Dirección: ${feEsc(e.empresa_direccion)}</div>` : ''}
+                    ${data.empresa_ciudad ? `<div>Ciudad: ${feEsc(data.empresa_ciudad)}</div>` : ''}
+                    ${e.empresa_telefono ? `<div>Teléfono: ${feEsc(e.empresa_telefono)}</div>` : ''}
+                    ${e.empresa_email ? `<div>Email: ${feEsc(e.empresa_email)}</div>` : ''}
+                    ${resol ? `<div>${feEsc(resol)}</div>` : ''}
+                    <div class="emp-regimen">${feEsc((e.empresa_regimen || '').toUpperCase())}</div>
                 </div>
-                <div class="docbox">
-                    <div class="doctype">FACTURA ELECTRÓNICA DE VENTA</div>
-                    <div class="docnum">No. ${feEsc(feNumero(f))}</div>
-                    <div class="regimen">${feEsc(e.empresa_regimen || '')}</div>
-                </div>
+                <div class="qr">${qr ? `<img src="${qr}">` : ''}</div>
             </header>
 
-            <section class="info">
-                <div class="col">
-                    <div class="lbl">ADQUIRIENTE</div>
-                    <div class="big">${feEsc(f.cliente_nombre)}</div>
-                    <div>${feEsc(feTipoDoc(f.cliente_tipo_documento))}: <b>${feEsc(f.cliente_identificacion)}-${feEsc(f.cliente_dv)}</b></div>
-                    <div>Dirección: ${feEsc(f.cliente_direccion || '-')}</div>
-                    <div>Municipio: ${feEsc(f.cliente_municipio || '-')}</div>
-                    <div>Teléfono: ${feEsc(f.cliente_telefono || '-')}${f.cliente_email ? ' · ' + feEsc(f.cliente_email) : ''}</div>
-                </div>
-                <div class="col">
-                    <table class="kv">
-                        <tr><td>Fecha de emisión</td><td>${feEsc(fecha)}</td></tr>
-                        <tr><td>Fecha de vencimiento</td><td>${feEsc(f.fecha_vencimiento || fecha.substring(0, 10))}</td></tr>
-                        <tr><td>Forma de pago</td><td>${f.forma_pago == 2 ? `Crédito (${f.dias_credito} días)` : 'Contado'}</td></tr>
-                        <tr><td>Medio de pago</td><td>${feEsc(feMedioPago(f.medio_pago))}</td></tr>
-                        <tr><td>Moneda</td><td>COP</td></tr>
-                        <tr><td>Pedido</td><td>${feEsc(f.pedido?.numero_pedido || '')}</td></tr>
-                    </table>
-                </div>
-            </section>
+            <table class="caja datos">
+                <tr>
+                    <td class="col-cli">
+                        <table class="kv">
+                            <tr><th>Cliente:</th><td><b>${feEsc(f.cliente_nombre)}</b></td></tr>
+                            <tr><th>${tipoDoc === 'NIT' ? 'NIT:' : 'NIT / CC:'}</th><td>${feEsc(f.cliente_identificacion)}${f.cliente_tipo_documento === '31' ? '-' + feEsc(f.cliente_dv) : ''}</td></tr>
+                            <tr><th>Dirección:</th><td>${feEsc(f.cliente_direccion && f.cliente_direccion !== '-' ? f.cliente_direccion : '')}</td></tr>
+                            <tr><th>Ciudad:</th><td>${feEsc(f.cliente_municipio || '')}</td></tr>
+                            <tr><th>Departamento:</th><td>${feEsc((f.cliente_departamento || '').toUpperCase())}</td></tr>
+                            <tr><th>Teléfono:</th><td>${feEsc(f.cliente_telefono && f.cliente_telefono !== '0' ? f.cliente_telefono : '')}</td></tr>
+                            <tr><th><u>Email:</u></th><td><u>${feEsc(f.cliente_email || '')}</u></td></tr>
+                        </table>
+                    </td>
+                    <td class="col-doc">
+                        <div class="doc-num"><span>Factura Electrónica de Venta:</span><b>${feEsc(feNumero(f))}</b></div>
+                        <table class="fechas">
+                            <tr><th>Fecha de Expedición:</th><th>Fecha de Vencimiento:</th></tr>
+                            <tr><td>${fechaHora(f.fecha_emision)}</td><td>${fechaHora(f.fecha_vencimiento || f.fecha_emision).substring(0, 10)}</td></tr>
+                        </table>
+                        <div class="linea"><b>Elaboración:</b> ${fechaHora(f.created_at || f.fecha_emision)}</div>
+                        <div class="linea"><b>Forma de Pago:</b> ${formaPago} &nbsp; ${feEsc(feMedioPago(f.medio_pago))}</div>
+                        <div class="linea"><b>Orden de Compra:</b></div>
+                        <div class="linea"><b>Orden de Despacho:</b> ${feEsc(f.pedido?.numero_pedido || '')}</div>
+                        <div class="linea"><b>Nro. de Remisión:</b></div>
+                        <div class="linea"><b>Moneda Aplicable:</b> COP &nbsp;&nbsp; <b>Tasa Cambio:</b></div>
+                    </td>
+                </tr>
+                <tr><td colspan="2" class="vendedor"><b>Vendedor:</b> ${feEsc((f.pedido?.vendedor?.nombre || f.usuario?.nombre || '').toUpperCase())}</td></tr>
+            </table>
 
             <table class="items">
-                <thead><tr><th>#</th><th>Código</th><th>Descripción</th><th>Unidad</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">Desc.</th><th class="r">IVA</th><th class="r">Total</th></tr></thead>
+                <thead><tr><th class="c-cod">Código</th><th>Descripción</th><th class="c-um">UM</th><th class="c-cant">Cantidad</th><th class="c-val">Vr.Unitario</th><th class="c-pct">%INC</th><th class="c-pct">%IVA</th><th class="c-tot">Valor Total</th></tr></thead>
                 <tbody>
-                    ${(f.detalles || []).map((d, i) => `
-                        <tr>
-                            <td>${i + 1}</td><td>${feEsc(d.codigo || '')}</td><td>${feEsc(d.descripcion)}</td><td>${feEsc(d.unidad || '')}</td>
-                            <td class="r">${formatNumber(d.cantidad)}</td><td class="r">${feMoney(d.precio)}</td>
-                            <td class="r">${parseFloat(d.descuento) > 0 ? feMoney(d.descuento) : '-'}</td>
-                            <td class="r">${formatNumber(d.iva_porcentaje)}%</td><td class="r">${feMoney(d.total)}</td>
-                        </tr>`).join('')}
+                    ${det.map(d => {
+                        const factor = 1 + parseFloat(d.iva_porcentaje || 0) / 100;
+                        return `<tr>
+                            <td>${feEsc(d.codigo || '')}</td><td>${feEsc(d.descripcion)}</td><td>${um(d.unidad)}</td>
+                            <td class="r">${n2(d.cantidad)}</td><td class="r">${n2(parseFloat(d.precio) / factor)}</td>
+                            <td class="r">0.0</td><td class="r">${parseFloat(d.iva_porcentaje || 0).toFixed(1)}</td><td class="r">${n2(d.total)}</td>
+                        </tr>`;
+                    }).join('')}
+                    <tr class="relleno" style="height:${Math.max(0, FILAS_MIN - det.length) * 17}px"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
                 </tbody>
             </table>
 
-            <section class="bottom">
-                <div class="left">
-                    <div class="qrrow">
-                        ${qr ? `<img src="${qr}" class="qr">` : ''}
-                        <div>
-                            <div class="lbl">CUFE</div>
-                            <div class="cufe">${feEsc(f.cufe)}</div>
-                            <div class="small">Tipo de operación: Estándar · Total de líneas: ${(f.detalles || []).length}</div>
-                        </div>
-                    </div>
-                    ${f.nota ? `<div class="small"><b>Nota:</b> ${feEsc(f.nota)}</div>` : ''}
-                    ${e.nota_legal ? `<div class="legal">${feEsc(e.nota_legal)}</div>` : ''}
-                </div>
-                <table class="totals">
-                    <tr><td>Subtotal</td><td>${feMoney(f.subtotal)}</td></tr>
-                    ${ivas.map(i => `<tr><td>IVA ${formatNumber(i.pct)}%</td><td>${feMoney(i.iva)}</td></tr>`).join('')}
-                    ${parseFloat(f.descuento) > 0 ? `<tr><td>Descuento</td><td>-${feMoney(f.descuento)}</td></tr>` : ''}
-                    <tr class="grand"><td>TOTAL A PAGAR</td><td>${feMoney(f.total)}</td></tr>
-                </table>
-            </section>
+            <table class="caja pie">
+                <tr>
+                    <td class="col-obs">
+                        <div class="obs"><b>Observaciones:</b> ${feEsc(f.nota || '')}</div>
+                        <div class="letras"><b>Valor en Letras:</b> ${feNumeroALetras(parseFloat(f.total))}</div>
+                    </td>
+                    <td class="col-tot">
+                        <table class="totales">
+                            <tr><th>Subtotal:</th><td>${n2(subtotal)}</td></tr>
+                            <tr><th>Descuento:</th><td>${n2(f.descuento)}</td></tr>
+                            <tr><th>Impoconsumo:</th><td>0.00</td></tr>
+                            <tr><th>IVA:</th><td>${n2(iva)}</td></tr>
+                            <tr class="b"><th>Total Factura:</th><td>${n2(totalFactura)}</td></tr>
+                            <tr><th>Retefuente:</th><td>0.00</td></tr>
+                            <tr><th>ReteIVA:</th><td>0.00</td></tr>
+                            <tr><th>Otros Dsctos:</th><td>0.00</td></tr>
+                            <tr class="neto"><th>NETO A PAGAR:</th><td>${n2(f.total)}</td></tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
 
-            <div class="sign">
-                <div><span></span>Elaborado por</div>
-                <div><span></span>Aceptada / Recibida por el cliente</div>
-            </div>
+            <div class="cufe"><b>CUFE:</b> ${feEsc(f.cufe)}</div>
 
-            <footer>
-                ${resol ? `<div>${feEsc(resol)}</div>` : ''}
-                <div><b>Representación gráfica de factura electrónica de venta</b></div>
-            </footer>
+            <table class="final">
+                <tr>
+                    <td class="legal">
+                        <div>${feEsc(e.nota_legal || 'La presente factura de venta se asimila en todos sus efectos a una letra de cambio (Código de Comercio Artículo 774 Numeral 5). Causará vencida la fecha de pago intereses de mora máximo permitido por la ley.')}</div>
+                        <div class="software">Elaborado por: Innovación Digital - Software: ContaRs 3.5 - NIT 11.105.169-8 - www.innovacion-digital.com - Representación gráfica de la factura electrónica de venta</div>
+                    </td>
+                    <td class="firma">
+                        <div class="firma-txt">Manifiesto que recibí real y materialmente las mercancías y servicios indicados en esta factura</div>
+                        <div class="firma-linea">Nombre, firma, cédula y sello</div>
+                    </td>
+                </tr>
+            </table>
         </div>`;
 
     const css = `
         *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Segoe UI',Arial,sans-serif;color:#111;font-size:11px;background:#fff}
-        .page{padding:22px 26px;max-width:820px;margin:0 auto}
-        header{display:flex;justify-content:space-between;gap:18px;padding-bottom:14px;border-bottom:3px solid #4338CA}
-        .emp{display:flex;gap:14px;align-items:center;line-height:1.45}
-        .logo{max-height:70px;max-width:130px;object-fit:contain}
-        .emp-name{font-size:17px;font-weight:800;color:#1E1B4B}
-        .emp-own{font-weight:600;text-transform:uppercase}
-        .docbox{border:2px solid #4338CA;border-radius:10px;padding:10px 16px;text-align:center;min-width:220px;align-self:flex-start}
-        .doctype{font-size:10.5px;font-weight:800;letter-spacing:.4px;color:#4338CA}
-        .docnum{font-size:20px;font-weight:800;margin:4px 0}
-        .regimen{font-size:10px;color:#555}
-        .info{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;margin:14px 0;line-height:1.55}
-        .info .col{border:1px solid #ddd;border-radius:8px;padding:10px 12px}
-        .lbl{font-size:9px;font-weight:700;color:#6366F1;letter-spacing:.6px;margin-bottom:3px}
-        .big{font-size:13px;font-weight:700}
-        .kv{width:100%;border-collapse:collapse}
-        .kv td{padding:2px 0}.kv td:first-child{color:#666}.kv td:last-child{text-align:right;font-weight:600}
-        .items{width:100%;border-collapse:collapse;margin-top:6px}
-        .items th{background:#EEF2FF;color:#3730A3;font-size:9.5px;text-transform:uppercase;padding:7px 6px;text-align:left;border-bottom:2px solid #C7D2FE}
-        .items td{padding:6px;border-bottom:1px solid #eee;vertical-align:top}
-        .r{text-align:right!important}
-        .bottom{display:grid;grid-template-columns:1fr 250px;gap:18px;margin-top:16px;page-break-inside:avoid}
-        .qrrow{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px}
-        .qr{width:112px;height:112px;image-rendering:pixelated}
-        .cufe{font-family:Consolas,monospace;font-size:8.5px;word-break:break-all;margin-bottom:6px}
-        .small{font-size:10px;color:#444;margin-bottom:6px}
-        .legal{font-size:9px;color:#555;border-top:1px dashed #ccc;padding-top:6px;margin-top:6px;text-align:justify}
-        .totals{width:100%;border-collapse:collapse;align-self:start}
-        .totals td{padding:5px 8px;border-bottom:1px solid #eee}.totals td:last-child{text-align:right;font-weight:600}
-        .totals .grand td{background:#4338CA;color:#fff;font-size:13px;font-weight:800;border:none}
-        .sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin:38px 20px 0;text-align:center;font-size:10px;color:#555}
-        .sign span{display:block;border-top:1px solid #999;margin-bottom:4px}
-        footer{margin-top:18px;padding-top:8px;border-top:1px solid #ddd;text-align:center;font-size:9px;color:#555;line-height:1.5}
-        .page{position:relative}
-        .sello-anulada{position:absolute;top:300px;left:50%;transform:translateX(-50%) rotate(-24deg);font-size:110px;font-weight:900;color:rgba(220,38,38,.16);border:10px solid rgba(220,38,38,.16);padding:0 30px;border-radius:20px;letter-spacing:10px;pointer-events:none;z-index:5}
-        .anulada-nota{background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:8px;padding:6px 12px;margin-bottom:12px;font-weight:700;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-        @media print{@page{size:letter;margin:10mm}.page{padding:0}}`;
+        body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:10.5px;background:#fff}
+        .page{position:relative;padding:16px 20px;max-width:816px;margin:0 auto}
+        header{display:grid;grid-template-columns:150px 1fr 110px;gap:14px;align-items:start;margin-bottom:10px}
+        .logo img{max-width:150px;max-height:110px;object-fit:contain}
+        .logo-txt{font-family:Georgia,serif;font-weight:900;font-size:26px;letter-spacing:1px;text-align:center;padding-top:16px}
+        .emp{line-height:1.38;font-size:10.5px}
+        .emp-nombre{font-weight:800;font-size:12.5px}
+        .emp-regimen{font-weight:800;font-size:12.5px;margin-top:1px}
+        .qr img{width:104px;height:104px;image-rendering:pixelated;display:block;margin-left:auto}
+        table{border-collapse:collapse;width:100%}
+        .caja{border:1.5px solid #000;margin-bottom:6px}
+        .caja>tbody>tr>td{border:1px solid #000;vertical-align:top}
+        .col-cli{width:60%;padding:6px 8px}
+        .col-doc{padding:0}
+        .kv th{text-align:left;font-weight:700;width:96px;padding:2.5px 0;white-space:nowrap}
+        .kv td{padding:2.5px 0}
+        .doc-num{display:flex;justify-content:space-between;gap:8px;padding:6px 8px;border-bottom:1px solid #000;font-weight:700;font-size:11px}
+        .doc-num b{font-size:12px}
+        .fechas{border-bottom:1px solid #000}
+        .fechas th{font-weight:700;padding:4px 8px 1px;text-align:center}
+        .fechas td{text-align:center;padding:0 8px 4px}
+        .linea{padding:3px 8px;border-bottom:1px solid #000}
+        .linea:last-child{border-bottom:none}
+        .vendedor{padding:5px 8px}
+        .items{border:1.5px solid #000;margin-bottom:6px}
+        .items th{border:1px solid #000;padding:4px 5px;font-weight:700;text-align:center;font-size:10.5px}
+        .items td{border-left:1px solid #000;border-right:1px solid #000;padding:2px 5px;height:17px;font-size:10.5px}
+        .items .r{text-align:right}
+        .c-cod{width:52px}.c-um{width:40px}.c-cant{width:66px}.c-val{width:86px}.c-pct{width:38px}.c-tot{width:100px}
+        .relleno td{height:auto}
+        .col-obs{width:64%;padding:0}
+        .obs{padding:6px 8px;min-height:92px;border-bottom:1px solid #000}
+        .letras{padding:6px 8px}
+        .col-tot{padding:4px 8px}
+        .totales th{text-align:left;font-weight:700;padding:1.6px 0}
+        .totales td{text-align:right;padding:1.6px 0}
+        .totales .neto th,.totales .neto td{font-weight:800;font-size:11.5px;border-top:1px solid #000;padding-top:3px}
+        .cufe{padding:6px 2px 8px;font-size:10px;word-break:break-all}
+        .final td{vertical-align:bottom}
+        .legal{width:56%;padding-right:14px}
+        .legal div:first-child{border:1px solid #000;padding:5px 7px;font-size:9.5px;font-weight:700;background:#f2f2f2;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        .software{font-size:8.5px;margin-top:4px;color:#222}
+        .final td.firma{border:1px solid #000;padding:6px 10px;height:92px;position:relative;vertical-align:top}
+        .firma-txt{text-align:center;font-size:10px}
+        .firma-linea{position:absolute;left:12px;right:12px;bottom:8px;border-top:1px solid #000;text-align:center;font-size:10px;padding-top:2px}
+        .sello-anulada{position:absolute;top:330px;left:50%;transform:translateX(-50%) rotate(-24deg);font-size:110px;font-weight:900;color:rgba(220,38,38,.16);border:10px solid rgba(220,38,38,.16);padding:0 30px;border-radius:20px;letter-spacing:10px;pointer-events:none;z-index:5}
+        .anulada-nota{background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:6px;padding:5px 10px;margin-bottom:8px;font-weight:700;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        @media print{@page{size:letter;margin:9mm}.page{padding:0}}`;
 
     feAbrirVentana(`FE_${feNumero(f)}`, html, css);
 }
