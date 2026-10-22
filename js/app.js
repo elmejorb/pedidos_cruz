@@ -98,6 +98,48 @@ function closeModal() {
     document.getElementById('modal-overlay').classList.remove('show');
 }
 
+/**
+ * Modal de confirmación (reemplaza confirm()). Se muestra encima de cualquier modal abierto.
+ * tipo: 'danger' | 'warning' | 'primary' | 'dian'. Devuelve Promise<boolean>.
+ */
+function confirmar(mensaje, { titulo = '¿Estás seguro?', ok = 'Aceptar', cancelar = 'Cancelar', tipo = 'primary', icono = null, detalle = '' } = {}) {
+    const iconos = { danger: 'fa-trash-can', warning: 'fa-triangle-exclamation', primary: 'fa-circle-question', dian: 'fa-paper-plane' };
+    return new Promise(resolve => {
+        document.getElementById('confirm-overlay')?.remove();
+        const ov = document.createElement('div');
+        ov.id = 'confirm-overlay';
+        ov.className = 'confirm-overlay';
+        ov.innerHTML = `
+            <div class="confirm-box confirm-${tipo}" role="alertdialog" aria-modal="true" aria-labelledby="confirm-titulo">
+                <div class="confirm-icon"><i class="fas ${icono || iconos[tipo] || iconos.primary}"></i></div>
+                <h3 id="confirm-titulo">${titulo}</h3>
+                <p>${mensaje}</p>
+                ${detalle ? `<div class="confirm-detalle">${detalle}</div>` : ''}
+                <div class="confirm-actions">
+                    <button class="btn btn-outline" data-r="0">${cancelar}</button>
+                    <button class="btn confirm-ok" data-r="1">${ok}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(ov);
+        requestAnimationFrame(() => ov.classList.add('show'));
+
+        const cerrar = r => {
+            document.removeEventListener('keydown', teclas, true);
+            ov.classList.remove('show');
+            setTimeout(() => ov.remove(), 180);
+            resolve(r);
+        };
+        const teclas = e => {
+            if (e.key === 'Escape') { e.stopPropagation(); cerrar(false); }
+            else if (e.key === 'Enter' && tipo !== 'dian' && tipo !== 'danger') { e.preventDefault(); cerrar(true); }
+        };
+        document.addEventListener('keydown', teclas, true);
+        ov.querySelectorAll('[data-r]').forEach(b => b.onclick = () => cerrar(b.dataset.r === '1'));
+        // En acciones delicadas el foco queda en "Cancelar"
+        ov.querySelector(tipo === 'dian' || tipo === 'danger' ? '[data-r="0"]' : '[data-r="1"]').focus();
+    });
+}
+
 // ========================================
 // COLOR PICKER
 // ========================================
@@ -1877,7 +1919,7 @@ async function renderClientes() {
     };
 
     window._deleteCliente = async (id) => {
-        if (!confirm('¿Eliminar este cliente?')) return;
+        if (!(await confirmar('El cliente dejará de aparecer en los listados.', { titulo: '¿Eliminar este cliente?', ok: 'Eliminar', tipo: 'danger' }))) return;
         const data = await api(`/clientes/${id}`, { method: 'DELETE' });
         if (data && !data.error) { toast('Cliente eliminado'); loadClientes(); }
     };
@@ -2285,7 +2327,7 @@ async function renderProductos() {
     };
 
     window._deleteProducto = async (id) => {
-        if (!confirm('¿Eliminar este producto?')) return;
+        if (!(await confirmar('El producto dejará de aparecer en el inventario y en los catálogos.', { titulo: '¿Eliminar este producto?', ok: 'Eliminar', tipo: 'danger' }))) return;
         const data = await api(`/productos/${id}`, { method: 'DELETE' });
         if (data && !data.error) { toast('Producto eliminado'); loadProductos(); }
     };
@@ -2596,7 +2638,7 @@ async function renderRutas() {
     };
 
     window._deleteRuta = async (id) => {
-        if (!confirm('¿Eliminar esta ruta?')) return;
+        if (!(await confirmar('Los clientes y pedidos de esta ruta quedarán sin ruta asignada.', { titulo: '¿Eliminar esta ruta?', ok: 'Eliminar', tipo: 'danger' }))) return;
         const data = await api(`/rutas/${id}`, { method: 'DELETE' });
         if (data && !data.error) { toast('Ruta eliminada'); loadRutas(); }
     };
@@ -3623,7 +3665,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Logout
     document.getElementById('sidebar-logout-btn').addEventListener('click', () => {
-        if (confirm('¿Cerrar sesión?')) logout();
+        confirmar('Tendrás que volver a ingresar con tu usuario y contraseña.', { titulo: '¿Cerrar sesión?', ok: 'Cerrar sesión', tipo: 'warning', icono: 'fa-right-from-bracket' }).then(ok => ok && logout());
     });
 
     // Browser back/forward buttons

@@ -2210,3 +2210,25 @@ body {
 .precio-ref.ultimo { color: #047857; }
 .precio-inv { font-size: 11px; font-weight: 500; color: var(--text-muted); margin-left: 4px; }
 .precio-ult-chip { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 5px; border-radius: 50%; background: #D1FAE5; color: #047857; font-size: 9px; vertical-align: middle; }
+
+/* Modal de confirmación (reemplaza confirm()) */
+.confirm-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(15, 23, 42, .55); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; padding: 16px; opacity: 0; transition: opacity .18s; }
+.confirm-overlay.show { opacity: 1; }
+.confirm-box { --c: var(--primary); --cl: rgba(99,102,241,.12); background: var(--card-bg, #fff); border-radius: 20px; width: 100%; max-width: 420px; padding: 28px 24px 22px; text-align: center; box-shadow: 0 25px 60px rgba(0,0,0,.25); transform: scale(.94) translateY(8px); transition: transform .18s; }
+.confirm-overlay.show .confirm-box { transform: none; }
+.confirm-danger { --c: var(--danger); --cl: var(--danger-light); }
+.confirm-warning { --c: var(--warning); --cl: var(--warning-light); }
+.confirm-dian { --c: #0F766E; --cl: #CCFBF1; }
+.confirm-icon { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 50%; background: var(--cl); color: var(--c); display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 0 0 8px color-mix(in srgb, var(--cl) 45%, transparent); }
+.confirm-box h3 { font-size: 18px; font-weight: 800; color: var(--text); margin: 0 0 8px; }
+.confirm-box p { font-size: 14px; color: var(--text-secondary, var(--text-muted)); margin: 0; line-height: 1.5; }
+.confirm-detalle { margin-top: 14px; border: 1px solid var(--border-light, var(--border)); border-radius: 12px; padding: 4px 14px; text-align: left; background: var(--bg); }
+.confirm-detalle > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; font-size: 13px; }
+.confirm-detalle > div + div { border-top: 1px dashed var(--border); }
+.confirm-detalle span { color: var(--text-muted); }
+.confirm-detalle b { color: var(--text); text-align: right; }
+.confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+.confirm-actions .btn { justify-content: center; padding: 11px 14px; }
+.confirm-ok { background: var(--c); color: #fff; border: none; }
+.confirm-ok:hover { filter: brightness(1.08); }
+@media (max-width: 400px) { .confirm-actions { grid-template-columns: 1fr; } .confirm-actions .confirm-ok { order: -1; } }

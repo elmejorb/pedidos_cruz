@@ -344,7 +344,7 @@ async function catEditar(id) {
 
 async function catEliminar(id) {
     const c = CAT.catalogos.find(x => x.id_catalogo === id);
-    if (!confirm(`¿Eliminar el catálogo "${c?.nombre}"? Los productos no se borran; solo deja de existir el catálogo y su enlace.`)) return;
+    if (!(await confirmar('Los productos no se borran; solo deja de existir el catálogo y su enlace público.', { titulo: `¿Eliminar el catálogo "${c?.nombre}"?`, ok: 'Eliminar', tipo: 'danger' }))) return;
     const r = await api(`/catalogos/${id}`, { method: 'DELETE' });
     if (r && !r.error) { toast('Catálogo eliminado'); renderCatalogos(); } else toast(r?.mensaje || 'Error', 'error');
 }
@@ -441,7 +441,7 @@ function catProveedor(id) {
 
 async function catEliminarProveedor(id) {
     const p = CAT.proveedores.find(x => x.id_proveedor === id);
-    if (!confirm(`¿Eliminar el proveedor "${p?.nombre}"? Sus productos quedarán sin proveedor.`)) return;
+    if (!(await confirmar('Sus productos quedarán sin proveedor asignado.', { titulo: `¿Eliminar el proveedor "${p?.nombre}"?`, ok: 'Eliminar', tipo: 'danger' }))) return;
     const r = await api(`/proveedores/${id}`, { method: 'DELETE' });
     if (r && !r.error) { toast('Proveedor eliminado'); renderCatalogos(); } else toast(r?.mensaje || 'Error', 'error');
 }

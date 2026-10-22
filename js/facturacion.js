@@ -304,7 +304,10 @@ async function abrirFacturarPedido(idPedido, idCliente, formaPedido = 'contado',
 
     async function enviar() {
         if (enviando) return;
-        if (!confirm(`¿Enviar a la DIAN la factura por ${feMoney(preview.totales.total)} a nombre de ${preview.cliente.nombre}?`)) return;
+        if (!(await confirmar(`Se enviará la factura electrónica a la DIAN. Una vez autorizada no se puede modificar.`, {
+            titulo: 'Enviar factura a la DIAN', ok: '<i class="fas fa-paper-plane"></i> Enviar a la DIAN', tipo: 'dian',
+            detalle: `<div><span>A nombre de</span><b>${feEsc(preview.cliente.nombre)}</b></div><div><span>Total</span><b>${feMoney(preview.totales.total)}</b></div>`,
+        }))) return;
         enviando = true;
 
         document.getElementById('modal-body').innerHTML = `
@@ -683,7 +686,7 @@ function feResumenIva(detalles) {
 // ACCIONES
 // ========================================
 async function feReintentar(id) {
-    if (!confirm('¿Reintentar el envío a la DIAN con los datos actuales del pedido y del cliente?')) return;
+    if (!(await confirmar('Se enviará de nuevo con los datos actuales del pedido y del cliente.', { titulo: '¿Reintentar el envío a la DIAN?', ok: '<i class="fas fa-rotate-right"></i> Reintentar', tipo: 'dian' }))) return;
     toast('Enviando a la DIAN...', 'warning', 6000);
     const data = await api(`/facturas/${id}/reenviar`, { method: 'POST', body: '{}' });
     if (data && !data.error) {
@@ -696,7 +699,7 @@ async function feReintentar(id) {
 }
 
 async function feEliminarIntento(id) {
-    if (!confirm('¿Eliminar este intento de facturación? (No afecta el pedido)')) return;
+    if (!(await confirmar('El pedido no se afecta; solo se borra este intento fallido.', { titulo: '¿Eliminar este intento de facturación?', ok: 'Eliminar', tipo: 'danger' }))) return;
     const data = await api(`/facturas/${id}`, { method: 'DELETE' });
     if (data && !data.error) { toast('Intento eliminado'); navigateTo('facturas'); }
     else toast(data?.mensaje || 'Error', 'error');
@@ -1213,7 +1216,7 @@ async function renderConfigFE() {
         else { pintarLogo(document.getElementById('cf-empresa_logo_url').value); toast(r?.mensaje || 'No se pudo subir el logo', 'error'); }
     };
     document.getElementById('cf-logo-quitar').onclick = async () => {
-        if (!confirm('¿Quitar el logo de la factura?')) return;
+        if (!(await confirmar('Las facturas se imprimirán con el nombre de la empresa en lugar del logo.', { titulo: '¿Quitar el logo?', ok: 'Quitar logo', tipo: 'warning', icono: 'fa-image' }))) return;
         const r = await api('/config-fe/logo', { method: 'DELETE' });
         if (r && !r.error) { pintarLogo(''); toast('Logo eliminado'); } else toast(r?.mensaje || 'Error', 'error');
     };
@@ -1462,8 +1465,10 @@ async function feAnular(id) {
             if (!body.lineas.length) { toast('Indica la cantidad a devolver de al menos un producto', 'warning'); return; }
             valor = totalDevolucion();
         }
-        const que = concepto === 1 ? `una nota crédito de DEVOLUCIÓN por ${feMoney(valor)}` : `la ANULACIÓN de la factura ${feNumero(f)} por ${feMoney(valor)}`;
-        if (!confirm(`¿Enviar a la DIAN ${que}? Esta acción no se puede deshacer.`)) return;
+        if (!(await confirmar(`Quedará registrada en la DIAN de forma permanente. Esta acción no se puede deshacer.`, {
+            titulo: 'Emitir nota crédito', ok: '<i class="fas fa-paper-plane"></i> Emitir nota crédito', tipo: 'dian', icono: 'fa-file-circle-minus',
+            detalle: `<div><span>Tipo</span><b>${concepto === 1 ? 'Devolución' : 'Anulación'}</b></div><div><span>Factura</span><b>${feEsc(feNumero(f))}</b></div><div><span>Valor</span><b>${feMoney(valor)}</b></div>`,
+        }))) return;
 
         $('modal-body').innerHTML = `
             <div class="fe-sending">

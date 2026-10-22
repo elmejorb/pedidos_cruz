@@ -296,10 +296,10 @@ function offFilaPendiente(x) {
         </div>`;
 }
 
-function offDescartar(uuid) {
+async function offDescartar(uuid) {
     const x = offLeer().find(i => i.uuid === uuid);
     if (!x) return;
-    if (!confirm(`¿Descartar ${x.tipo === 'pedido' ? 'el pedido' : 'el abono'} ${x.temporal}? No se enviará al servidor.`)) return;
+    if (!(await confirmar('No se enviará al servidor y se perderá de este celular.', { titulo: `¿Descartar ${x.tipo === 'pedido' ? 'el pedido' : 'el abono'} ${x.temporal}?`, ok: 'Descartar', tipo: 'danger' }))) return;
     offGuardar(offLeer().filter(i => i.uuid !== uuid));
     offAbrirPanel();
 }
