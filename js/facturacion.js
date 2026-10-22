@@ -1043,7 +1043,18 @@ async function renderConfigFE() {
                         <div class="form-group"><label>Teléfono</label><input type="text" id="cf-empresa_telefono" value="${v('empresa_telefono')}"></div>
                         <div class="form-group"><label>Email</label><input type="email" id="cf-empresa_email" value="${v('empresa_email')}"></div>
                     </div>
-                    <div class="form-group"><label>URL del logo</label><input type="text" id="cf-empresa_logo_url" value="${v('empresa_logo_url')}" placeholder="https://.../logo.png"></div>
+                    <div class="form-group" style="margin-bottom:0"><label>Logo <small style="color:var(--text-muted);font-weight:500">(aparece en el PDF y el ticket de la factura)</small></label>
+                        <div class="cf-logo">
+                            <div class="cf-logo-prev" id="cf-logo-prev">${c.empresa_logo_url ? `<img src="${v('empresa_logo_url')}" alt="Logo">` : '<i class="fas fa-image"></i><span>Sin logo</span>'}</div>
+                            <div class="cf-logo-acc">
+                                <label class="btn btn-primary btn-sm" style="cursor:pointer"><i class="fas fa-upload"></i> ${c.empresa_logo_url ? 'Cambiar logo' : 'Subir logo'}
+                                    <input type="file" id="cf-logo-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
+                                <button type="button" class="btn btn-ghost btn-sm" id="cf-logo-quitar" style="color:var(--danger);${c.empresa_logo_url ? '' : 'display:none'}"><i class="fas fa-trash"></i> Quitar</button>
+                                <div class="cf-logo-hint">PNG o JPG, máximo 3 MB. Mejor con fondo blanco o transparente.</div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="cf-empresa_logo_url" value="${v('empresa_logo_url')}">
+                    </div>
                 </div>
             </div>
 
@@ -1100,6 +1111,31 @@ async function renderConfigFE() {
     }
 
     document.getElementById('cf-guardar').onclick = () => guardar();
+
+    // Logo: se sube al servidor y queda guardado de una vez
+    const pintarLogo = url => {
+        document.getElementById('cf-empresa_logo_url').value = url || '';
+        document.getElementById('cf-logo-prev').innerHTML = url ? `<img src="${feEsc(url)}" alt="Logo">` : '<i class="fas fa-image"></i><span>Sin logo</span>';
+        document.getElementById('cf-logo-quitar').style.display = url ? '' : 'none';
+    };
+    document.getElementById('cf-logo-file').onchange = async e => {
+        const file = e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        if (file.size > 3 * 1024 * 1024) { toast('El logo no puede pesar más de 3 MB', 'warning'); return; }
+        const prev = document.getElementById('cf-logo-prev');
+        prev.innerHTML = '<div class="loading-spinner" style="border-color:var(--border);border-top-color:var(--primary)"></div>';
+        const fd = new FormData();
+        fd.append('logo', file);
+        const r = await api('/config-fe/logo', { method: 'POST', body: fd });
+        if (r && !r.error) { pintarLogo(r.logo_url); toast('Logo actualizado'); }
+        else { pintarLogo(document.getElementById('cf-empresa_logo_url').value); toast(r?.mensaje || 'No se pudo subir el logo', 'error'); }
+    };
+    document.getElementById('cf-logo-quitar').onclick = async () => {
+        if (!confirm('¿Quitar el logo de la factura?')) return;
+        const r = await api('/config-fe/logo', { method: 'DELETE' });
+        if (r && !r.error) { pintarLogo(''); toast('Logo eliminado'); } else toast(r?.mensaje || 'Error', 'error');
+    };
 
     document.getElementById('cf-probar').onclick = async () => {
         const btn = document.getElementById('cf-probar');

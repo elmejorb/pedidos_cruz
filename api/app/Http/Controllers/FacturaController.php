@@ -233,6 +233,53 @@ class FacturaController extends Controller
         return response()->json(['error' => false, 'mensaje' => 'Configuración guardada']);
     }
 
+    /** Logo de la empresa para el PDF de la factura (se guarda en public/uploads/empresa) */
+    public function subirLogo(Request $request)
+    {
+        if ($r = $this->soloAdmin($request)) return $r;
+        if (!$request->hasFile('logo') || !$request->file('logo')->isValid()) {
+            return response()->json(['error' => true, 'mensaje' => 'No se recibió la imagen del logo'], 400);
+        }
+        $file = $request->file('logo');
+        $ext = strtolower($file->getClientOriginalExtension());
+        if (!in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif']) || strpos((string) $file->getMimeType(), 'image/') !== 0) {
+            return response()->json(['error' => true, 'mensaje' => 'El logo debe ser una imagen PNG, JPG, WEBP o GIF'], 422);
+        }
+        if ($file->getSize() > 3 * 1024 * 1024) {
+            return response()->json(['error' => true, 'mensaje' => 'El logo no puede pesar más de 3 MB'], 422);
+        }
+
+        $dir = base_path('public/uploads/empresa');
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $nombre = 'logo_' . time() . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
+        $file->move($dir, $nombre);
+
+        $cfg = ConfigFe::actual();
+        $this->borrarLogoLocal($cfg->empresa_logo_url);
+        $cfg->empresa_logo_url = rtrim($request->root(), '/') . '/uploads/empresa/' . $nombre;
+        $cfg->save();
+
+        return response()->json(['error' => false, 'mensaje' => 'Logo actualizado', 'logo_url' => $cfg->empresa_logo_url]);
+    }
+
+    public function quitarLogo(Request $request)
+    {
+        if ($r = $this->soloAdmin($request)) return $r;
+        $cfg = ConfigFe::actual();
+        $this->borrarLogoLocal($cfg->empresa_logo_url);
+        $cfg->empresa_logo_url = null;
+        $cfg->save();
+        return response()->json(['error' => false, 'mensaje' => 'Logo eliminado']);
+    }
+
+    /** Borra el archivo anterior solo si es un logo subido aquí (no URLs externas) */
+    private function borrarLogoLocal(?string $url): void
+    {
+        if (!$url || !preg_match('#/uploads/empresa/(logo_\d+\.(png|jpg|webp|gif))$#', $url, $m)) return;
+        $ruta = base_path('public/uploads/empresa/' . $m[1]);
+        if (is_file($ruta)) @unlink($ruta);
+    }
+
     public function probarConexion(Request $request)
     {
         if ($r = $this->soloAdmin($request)) return $r;

@@ -107,5 +107,7 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     $router->get('/config-fe', 'FacturaController@config');
     $router->put('/config-fe', 'FacturaController@guardarConfig');
     $router->post('/config-fe/probar', 'FacturaController@probarConexion');
+    $router->post('/config-fe/logo', 'FacturaController@subirLogo');
+    $router->delete('/config-fe/logo', 'FacturaController@quitarLogo');
     $router->get('/dian/municipios', 'FacturaController@municipios');
 });
