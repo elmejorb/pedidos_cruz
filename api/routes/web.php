@@ -75,6 +75,13 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     $router->get('/reportes/cierre', 'ReporteController@cierre');
     $router->get('/reportes/stock', 'ReporteController@stock');
 
+    // Conteo de inventario
+    $router->get('/conteos', 'ConteoController@index');
+    $router->post('/conteos', 'ConteoController@store');
+    $router->get('/conteos/{id}', 'ConteoController@show');
+    $router->put('/conteos/{id}/item', 'ConteoController@guardarItem');
+    $router->post('/conteos/{id}/aplicar', 'ConteoController@aplicar');
+    $router->post('/conteos/{id}/cancelar', 'ConteoController@cancelar');
     // Catálogos y proveedores
     $router->get('/catalogos', 'CatalogoAdminController@index');
     $router->post('/catalogos', 'CatalogoAdminController@store');

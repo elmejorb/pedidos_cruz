@@ -313,13 +313,14 @@ function navigateTo(page, options = {}) {
         'facturas': 'Facturas Electrónicas',
         'cartera': 'Cartera y Pagos',
         'catalogos': 'Catálogos',
+        'conteo': 'Conteo de Inventario',
         'config-fe': 'Configuración Facturación Electrónica',
     };
 
     document.getElementById('header-title').textContent = titles[page] || 'Pedidos Cruz';
 
     // Block admin-only pages for vendedores
-    const adminPages = ['usuarios', 'categorias', 'productos', 'reportes', 'dashboard', 'rutas', 'despacho', 'facturas', 'config-fe'];
+    const adminPages = ['usuarios', 'categorias', 'productos', 'reportes', 'dashboard', 'rutas', 'despacho', 'facturas', 'config-fe', 'conteo'];
     if (adminPages.includes(page) && state.usuario?.rol !== 'admin') {
         const container = document.getElementById('page-container');
         container.innerHTML = '<div class="empty-state"><i class="fas fa-lock"></i><h3>Acceso restringido</h3><p>No tienes permisos para acceder a esta sección</p></div>';
@@ -345,6 +346,7 @@ function navigateTo(page, options = {}) {
         'facturas': renderFacturas,
         'cartera': renderCartera,
         'catalogos': renderCatalogos,
+        'conteo': renderConteo,
         'config-fe': renderConfigFE,
     };
 
@@ -3602,7 +3604,7 @@ function handleHashRoute() {
         return true;
     }
 
-    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho', 'facturas', 'config-fe', 'cartera', 'catalogos'];
+    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho', 'facturas', 'config-fe', 'cartera', 'catalogos', 'conteo'];
     if (validPages.includes(page)) {
         navigateTo(page, { skipHash: true });
         return true;
