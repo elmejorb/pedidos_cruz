@@ -330,8 +330,8 @@ class PedidoController extends Controller
         $pedido->estado = $request->estado;
         $pedido->save();
 
-        // If cancelled, restore stock (equivalent units)
-        if ($request->estado === 'cancelado') {
+        // If cancelled, restore stock (equivalent units). Solo la primera vez: si ya estaba cancelado no se suma de nuevo.
+        if ($request->estado === 'cancelado' && $estadoAnterior !== 'cancelado') {
             $detalles = PedidoDetalle::where('id_pedido', $id)->get();
             foreach ($detalles as $detalle) {
                 $producto = Producto::find($detalle->id_producto);
