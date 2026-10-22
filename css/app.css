@@ -2191,3 +2191,15 @@ body {
     .cr-tabs { display: flex; }
     .cr-tab { flex: 1; justify-content: center; padding: 10px 8px; font-size: 13px; }
 }
+
+/* Facturar a: cliente del pedido / consumidor final */
+.fe-adq-opciones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.fe-adq-op { display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border: 2px solid var(--border); border-radius: 12px; background: var(--card-bg, #fff); cursor: pointer; transition: all .15s; font: inherit; color: var(--text); min-width: 0; }
+.fe-adq-op i { font-size: 18px; color: var(--text-muted); flex-shrink: 0; }
+.fe-adq-op span { display: flex; flex-direction: column; min-width: 0; }
+.fe-adq-op b { font-size: 13px; }
+.fe-adq-op small { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fe-adq-op:hover { border-color: var(--primary); }
+.fe-adq-op.active { border-color: var(--primary); background: rgba(99,102,241,.08); box-shadow: 0 2px 8px rgba(99,102,241,.15); }
+.fe-adq-op.active i { color: var(--primary); }
+@media (max-width: 480px) { .fe-adq-opciones { grid-template-columns: 1fr; } }

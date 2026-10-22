@@ -162,6 +162,7 @@ async function abrirFacturarPedido(idPedido, idCliente, formaPedido = 'contado',
     const opts = { forma_pago: credito ? 2 : 1, medio_pago: credito ? 30 : 10, dias_credito: credito && diasPedido > 0 ? diasPedido : 30, consumidor_final: false, email: '' };
     let preview = null;
     let enviando = false;
+    let clientePedido = null; // datos del cliente real, para mostrarlo aunque se elija Consumidor Final
 
     openModal('Facturar electrónicamente', `<div style="text-align:center;padding:40px"><div class="loading-spinner" style="border-color:var(--border);border-top-color:var(--primary);margin:0 auto"></div></div>`);
     feModalWide();
@@ -177,6 +178,7 @@ async function abrirFacturarPedido(idPedido, idCliente, formaPedido = 'contado',
             return;
         }
         preview = data.preview;
+        if (!opts.consumidor_final) clientePedido = preview.cliente;
         if (!opts.email && preview.cliente.email) opts.email = preview.cliente.email;
         render();
     }
@@ -204,14 +206,21 @@ async function abrirFacturarPedido(idPedido, idCliente, formaPedido = 'contado',
 
             <div class="fe-grid-2">
                 <div class="fe-box">
-                    <div class="fe-box-title"><i class="fas fa-user"></i> Adquiriente</div>
+                    <div class="fe-box-title"><i class="fas fa-user"></i> Facturar a</div>
+                    <div class="fe-adq-opciones">
+                        <button type="button" class="fe-adq-op ${!opts.consumidor_final ? 'active' : ''}" data-cf="0">
+                            <i class="fas fa-user-check"></i>
+                            <span><b>Cliente del pedido</b><small>${feEsc(clientePedido?.nombre || 'Cliente')}${clientePedido?.identificacion ? ' · ' + feEsc(clientePedido.identificacion) : ''}</small></span>
+                        </button>
+                        <button type="button" class="fe-adq-op ${opts.consumidor_final ? 'active' : ''}" data-cf="1">
+                            <i class="fas fa-users"></i>
+                            <span><b>Consumidor Final</b><small>NIT 222222222</small></span>
+                        </button>
+                    </div>
                     <div class="fe-kv"><span>Nombre</span><strong>${feEsc(c.nombre)}</strong></div>
                     <div class="fe-kv"><span>${feEsc(c.tipo_documento_nombre)}</span><strong>${feEsc(c.identificacion || '—')}${c.identificacion ? '-' + c.dv : ''}</strong></div>
                     <div class="fe-kv"><span>Municipio</span><strong>${feEsc(c.municipio ? c.municipio.name + ' (' + c.municipio.dept_name + ')' : '—')}</strong></div>
                     <div class="fe-kv"><span>Dirección</span><strong>${feEsc(c.direccion)}</strong></div>
-                    <label class="fe-check" style="margin-top:10px">
-                        <input type="checkbox" id="fe-cf" ${opts.consumidor_final ? 'checked' : ''}> Facturar a <strong>Consumidor Final</strong>
-                    </label>
                 </div>
                 <div class="fe-box">
                     <div class="fe-box-title"><i class="fas fa-credit-card"></i> Pago</div>
@@ -270,7 +279,12 @@ async function abrirFacturarPedido(idPedido, idCliente, formaPedido = 'contado',
             </button>`;
 
         const recargar = debounce(cargarPreview, 400);
-        document.getElementById('fe-cf').onchange = e => { opts.consumidor_final = e.target.checked; cargarPreview(); };
+        document.querySelectorAll('.fe-adq-op').forEach(b => b.onclick = () => {
+            const cf = b.dataset.cf === '1';
+            if (cf === opts.consumidor_final) return;
+            opts.consumidor_final = cf;
+            cargarPreview();
+        });
         document.getElementById('fe-forma').onchange = e => {
             opts.forma_pago = parseInt(e.target.value);
             cargarPreview();
@@ -290,7 +304,7 @@ async function abrirFacturarPedido(idPedido, idCliente, formaPedido = 'contado',
 
     async function enviar() {
         if (enviando) return;
-        if (!confirm(`¿Enviar la factura por ${feMoney(preview.totales.total)} a la DIAN?`)) return;
+        if (!confirm(`¿Enviar a la DIAN la factura por ${feMoney(preview.totales.total)} a nombre de ${preview.cliente.nombre}?`)) return;
         enviando = true;
 
         document.getElementById('modal-body').innerHTML = `
