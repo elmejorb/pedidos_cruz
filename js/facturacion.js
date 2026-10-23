@@ -1037,8 +1037,10 @@ async function feImprimirTicket(id) {
             ${f.cliente_direccion && f.cliente_direccion !== '-' ? `<div>Dir: ${feEsc(f.cliente_direccion)}</div>` : ''}
             <hr>
             ${(f.detalles || []).map(d => `
-                <div>${feEsc(d.descripcion)}</div>
-                <div class="row"><span>${formatNumber(d.cantidad)} x ${feMoney(d.precio)} ${parseFloat(d.iva_porcentaje) > 0 ? 'A' : 'E'}</span><span>${feMoney(d.total)}</span></div>`).join('')}
+                <div class="it">
+                    <div class="it-nom">${feEsc(d.descripcion)}</div>
+                    <div class="row it-val"><span>${formatNumber(d.cantidad)} x ${feMoney(d.precio)} ${parseFloat(d.iva_porcentaje) > 0 ? 'A' : 'E'}</span><span class="b">${feMoney(d.total)}</span></div>
+                </div>`).join('')}
             <hr>
             <div class="row"><span>SUBTOTAL</span><span>${feMoney(f.subtotal)}</span></div>
             ${ivas.map(i => `<div class="row"><span>IVA ${formatNumber(i.pct)}%</span><span>${feMoney(i.iva)}</span></div>`).join('')}
@@ -1057,9 +1059,13 @@ async function feImprimirTicket(id) {
 
     const css = `
         *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:Arial,sans-serif;font-size:11px;color:#000}
+        body{font-family:Arial,sans-serif;font-size:12px;color:#000}
         .t{width:72mm;padding:2mm}
-        .c{text-align:center}.b{font-weight:700}.big{font-size:13px}
+        .c{text-align:center}.b{font-weight:700}.big{font-size:14px}
+        .it{padding:3px 0;border-bottom:1px dotted #999}
+        .it:last-of-type{border-bottom:none}
+        .it-nom{font-size:13px;font-weight:700;line-height:1.25}
+        .it-val{font-size:12.5px;margin-top:1px}
         .row{display:flex;justify-content:space-between;gap:6px}
         hr{border:none;border-top:1px dashed #000;margin:5px 0}
         .logo{max-width:40mm;max-height:20mm}
