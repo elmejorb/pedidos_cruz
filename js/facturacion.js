@@ -218,6 +218,7 @@ async function abrirFacturarPedido(idPedido, idCliente, formaPedido = 'contado',
                         </button>
                     </div>
                     <div class="fe-kv"><span>Nombre</span><strong>${feEsc(c.nombre)}</strong></div>
+                    ${c.negocio ? `<div class="fe-kv"><span>Negocio</span><strong style="font-weight:500;color:var(--text-muted)">${feEsc(c.negocio)}</strong></div>` : ''}
                     <div class="fe-kv"><span>${feEsc(c.tipo_documento_nombre)}</span><strong>${feEsc(c.identificacion || '—')}${c.identificacion ? '-' + c.dv : ''}</strong></div>
                     <div class="fe-kv"><span>Municipio</span><strong>${feEsc(c.municipio ? c.municipio.name + ' (' + c.municipio.dept_name + ')' : '—')}</strong></div>
                     <div class="fe-kv"><span>Dirección</span><strong>${feEsc(c.direccion)}</strong></div>

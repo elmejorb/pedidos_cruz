@@ -86,6 +86,7 @@ class FacturacionElectronicaService
         $cli = $pedido->cliente;
         $consumidorFinal = !empty($opciones['consumidor_final']);
         $municipio = null;
+        $negocio = '';
 
         if ($consumidorFinal) {
             $identificacion = self::CONSUMIDOR_FINAL['identificacion'];
@@ -96,8 +97,14 @@ class FacturacionElectronicaService
         } else {
             $identificacion = self::nitBase($cli->nit_cedula ?? '');
             $tipoDoc = (string) ($cli->tipo_documento ?? '13');
-            $nombre = trim($cli->razon_social ?: $cli->nombre);
             $tipoOrg = (int) ($cli->tipo_organizacion ?? 2);
+            // El adquiriente es el titular del documento: persona natural → su nombre;
+            // persona jurídica (1) → razón social. El "Negocio" de una persona natural es solo informativo.
+            $nombre = $tipoOrg === 1
+                ? trim($cli->razon_social ?: $cli->nombre)
+                : trim($cli->nombre ?: $cli->razon_social);
+            $negocio = trim($cli->razon_social ?? '');
+            if ($negocio !== '' && mb_strtolower($negocio) === mb_strtolower($nombre)) $negocio = '';
             $idResp = (int) ($cli->id_responsabilidad ?? 4);
 
             if (!$identificacion || $identificacion === '0') {
@@ -182,6 +189,7 @@ class FacturacionElectronicaService
                 'tipo_organizacion' => $tipoOrg,
                 'id_responsabilidad' => $idResp,
                 'nombre' => $nombre,
+                'negocio' => $negocio,
                 'direccion' => $consumidorFinal ? '-' : ($cli->direccion ?: '-'),
                 'telefono' => $consumidorFinal ? '0' : (preg_replace('/[^0-9]/', '', $cli->telefono ?? '') ?: '0'),
                 'email' => $email,
