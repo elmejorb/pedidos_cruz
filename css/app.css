@@ -2378,3 +2378,11 @@ body {
 .ep-precio small { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .ep-precio i { font-size: 10px; color: var(--text-muted); margin-left: 4px; }
 .precio-ref.editado { color: #B45309; }
+
+/* Estado del correo de la factura electrónica */
+.fe-mail { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 30px; height: 30px; padding: 0 7px; border-radius: 8px; border: 1.5px solid color-mix(in srgb, var(--c) 35%, transparent); background: var(--bg); color: var(--c); cursor: pointer; font-size: 13px; vertical-align: middle; transition: transform .12s, box-shadow .12s; }
+.fe-mail:hover { transform: translateY(-1px); box-shadow: 0 3px 10px color-mix(in srgb, var(--c) 30%, transparent); }
+.fe-mail.no_enviado, .fe-mail.sin_email { border-style: dashed; background: transparent; }
+.fe-mail.con-texto { height: auto; padding: 4px 10px; font-size: 12.5px; font-weight: 600; }
+.fe-mail.abierto i, .fe-mail.clic i { animation: fe-mail-pop .5s ease-out; }
+@keyframes fe-mail-pop { 0% { transform: scale(.6); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }

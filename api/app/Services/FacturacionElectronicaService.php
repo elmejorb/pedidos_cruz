@@ -339,12 +339,26 @@ class FacturacionElectronicaService
                 'errores' => null,
                 'email_enviado' => !empty($email['success']) ? 1 : 0,
                 'email_enviado_at' => !empty($email['success']) ? Carbon::now() : null,
+                'email_status' => !empty($email['success']) ? 'enviado' : null,
+                'email_destinatario' => !empty($email['success']) ? $factura->cliente_email : null,
             ]);
             $factura->save();
 
+            // El correo se envía con el endpoint dedicado: send-v2 no siempre respeta send_email.
+            // Si falla, la factura sigue autorizada; se puede reenviar desde el listado.
+            $msgEmail = '';
+            if (!$factura->email_enviado && $factura->cliente_email && filter_var($factura->cliente_email, FILTER_VALIDATE_EMAIL)) {
+                try {
+                    $env = $this->enviarCorreo($factura, $factura->cliente_email, false, $login);
+                    $msgEmail = $env['ok'] ? " · enviada a {$factura->cliente_email}" : ' · el correo no se pudo enviar (puedes reenviarlo)';
+                } catch (\Throwable $e) {
+                    $msgEmail = ' · el correo no se pudo enviar (puedes reenviarlo)';
+                }
+            }
+
             return [
                 'ok' => true, 'http' => 200,
-                'mensaje' => "Factura {$factura->prefijo}{$factura->numero} autorizada por la DIAN",
+                'mensaje' => "Factura {$factura->prefijo}{$factura->numero} autorizada por la DIAN{$msgEmail}",
                 'factura' => $factura->fresh('detalles'),
             ];
         }
@@ -793,26 +807,108 @@ class FacturacionElectronicaService
 
     public function reenviarEmail(Factura $factura, string $email): array
     {
+        return $this->enviarCorreo($factura, $email, true);
+    }
+
+    /**
+     * Envía el PDF + XML (AttachedDocument) por /api/email/send-complete.
+     * $email puede traer varios correos separados por coma. Un 409 (ya enviado) cuenta como enviado.
+     */
+    public function enviarCorreo(Factura $factura, string $email, bool $forzar = false, ?array $login = null): array
+    {
         if (!$factura->cufe) return ['ok' => false, 'mensaje' => 'La factura no tiene CUFE'];
 
-        $login = $this->login();
+        $login = $login ?: $this->login();
         if (!$login['ok']) return ['ok' => false, 'mensaje' => $login['mensaje']];
 
         $res = $this->http('POST', '/api/email/send-complete', [
             'company_id' => $login['company_id'],
             'cufe' => $factura->cufe,
             'email' => $email,
-            'force_resend' => true,
-        ], $login['token']);
+            'force_resend' => $forzar,
+        ], $login['token'], 90);
 
-        $ok = $res['http'] === 200 && ($res['body']['success'] ?? true);
+        $yaEnviado = $res['http'] === 409;
+        $ok = ($res['http'] === 200 && ($res['body']['success'] ?? true)) || $yaEnviado;
         if ($ok) {
-            $factura->update(['email_enviado' => 1, 'email_enviado_at' => Carbon::now(), 'cliente_email' => $email]);
+            $factura->update([
+                'email_enviado' => 1,
+                'email_enviado_at' => Carbon::now(),
+                'email_status' => 'enviado',
+                'email_destinatario' => $email,
+                'email_status_at' => Carbon::now(),
+                'cliente_email' => $factura->cliente_email ?: $email,
+            ]);
         }
+        $msg = $res['body']['message'] ?? $res['body']['error'] ?? null;
         return [
             'ok' => $ok,
-            'mensaje' => $res['body']['message'] ?? ($ok ? "Factura enviada a {$email}" : 'No se pudo enviar el correo'),
+            'mensaje' => $yaEnviado ? 'La factura ya había sido enviada por correo'
+                : ($ok ? "Factura enviada a {$email}" : ('No se pudo enviar el correo' . ($msg && is_string($msg) ? ": {$msg}" : ''))),
         ];
+    }
+
+    /**
+     * Trae de la API el estado del correo de cada documento (lo actualizan los webhooks de Brevo/Resend)
+     * y lo guarda en pc_facturas. Se limita a una consulta cada 2 minutos salvo que se fuerce.
+     */
+    public function sincronizarEstadosEmail(bool $forzar = false): array
+    {
+        $marca = storage_path('app/fe_email_sync.txt');
+        if (!$forzar && is_file($marca) && time() - filemtime($marca) < 120) {
+            return ['ok' => true, 'omitido' => true, 'actualizadas' => 0];
+        }
+
+        $facturas = Factura::whereNotNull('cufe')->where('cufe', '<>', '')
+            ->where('fecha_emision', '>=', Carbon::now()->subDays(120))
+            ->get(['id_factura', 'cufe', 'fecha_emision', 'email_enviado', 'email_status', 'email_destinatario']);
+        if ($facturas->isEmpty()) return ['ok' => true, 'actualizadas' => 0];
+
+        $login = $this->login();
+        if (!$login['ok']) return ['ok' => false, 'mensaje' => $login['mensaje']];
+
+        // La API filtra por mes (en UTC): se consulta el mes de cada factura y el del día siguiente
+        $meses = [];
+        foreach ($facturas as $f) {
+            $d = Carbon::parse($f->fecha_emision);
+            $meses[$d->format('Y-n')] = true;
+            $meses[$d->copy()->addDay()->format('Y-n')] = true;
+        }
+
+        $remoto = [];
+        foreach (array_keys($meses) as $ym) {
+            [$anio, $mes] = explode('-', $ym);
+            $page = 1;
+            do {
+                $r = $this->http('GET', "/api/empresas/{$login['company_id']}/documentos-electronicos?page={$page}&anio={$anio}&mes={$mes}", null, $login['token'], 30);
+                if ($r['http'] !== 200) return ['ok' => false, 'mensaje' => 'No se pudo consultar el estado de los correos en la API'];
+                foreach ($r['body']['data'] ?? [] as $doc) {
+                    if (!empty($doc['cufe'])) $remoto[$doc['cufe']] = $doc;
+                }
+                $last = (int) ($r['body']['last_page'] ?? 1);
+                $page++;
+            } while ($page <= $last && $page <= 50);
+        }
+
+        $actualizadas = 0;
+        foreach ($facturas as $f) {
+            $doc = $remoto[$f->cufe] ?? null;
+            if (!$doc) continue;
+            $enviado = !empty($doc['email_sent']);
+            $status = $doc['email_status'] ?? null;
+            if (!$enviado && !$status) continue; // la API no sabe del correo: no se borra lo que haya aquí
+            $nuevo = [
+                'email_enviado' => 1,
+                'email_status' => $status ?: 'enviado',
+                'email_destinatario' => $doc['email_recipient'] ?? $f->email_destinatario,
+            ];
+            if ($nuevo['email_status'] !== $f->email_status || $nuevo['email_destinatario'] !== $f->email_destinatario || !$f->email_enviado) {
+                Factura::where('id_factura', $f->id_factura)->update($nuevo + ['email_status_at' => Carbon::now()]);
+                $actualizadas++;
+            }
+        }
+        @touch($marca);
+        return ['ok' => true, 'actualizadas' => $actualizadas];
     }
 
     /** Prueba las credenciales y devuelve la(s) resolución(es) activas. */

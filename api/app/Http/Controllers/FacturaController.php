@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Models\ConfigFe;
 use App\Models\Factura;
 use App\Models\Pedido;
@@ -234,7 +235,32 @@ class FacturaController extends Controller
         if (!$factura) return response()->json(['error' => true, 'mensaje' => 'Factura no encontrada'], 404);
 
         $res = (new FacturacionElectronicaService())->reenviarEmail($factura, $request->email);
-        return response()->json(['error' => !$res['ok'], 'mensaje' => $res['mensaje']], $res['ok'] ? 200 : 422);
+
+        // Opcional: dejar el correo en la ficha del cliente para las próximas facturas
+        if ($res['ok'] && filter_var($request->input('guardar_cliente', false), FILTER_VALIDATE_BOOLEAN)) {
+            $idCliente = DB::table('pc_pedidos')->where('id_pedido', $factura->id_pedido)->value('id_cliente');
+            if ($idCliente) DB::table('pc_clientes')->where('id_cliente', $idCliente)->update(['email' => $request->email]);
+        }
+
+        $factura->refresh();
+        return response()->json([
+            'error' => !$res['ok'], 'mensaje' => $res['mensaje'],
+            'email' => $factura->only(['id_factura', 'email_enviado', 'email_status', 'email_destinatario', 'email_status_at', 'cliente_email']),
+        ], $res['ok'] ? 200 : 422);
+    }
+
+    /** Estado del correo de cada factura (sincronizado con la API). ?forzar=1 ignora la pausa de 2 minutos. */
+    public function emailEstados(Request $request)
+    {
+        if ($r = $this->soloAdmin($request)) return $r;
+        if (!Schema::hasColumn('pc_facturas', 'email_status')) {
+            return response()->json(['error' => true, 'mensaje' => 'Falta la migración fe_email_estado.sql'], 500);
+        }
+        $sync = (new FacturacionElectronicaService())->sincronizarEstadosEmail(filter_var($request->input('forzar', false), FILTER_VALIDATE_BOOLEAN));
+        $estados = Factura::whereNotNull('cufe')
+            ->get(['id_factura', 'email_enviado', 'email_status', 'email_destinatario', 'email_status_at', 'cliente_email'])
+            ->keyBy('id_factura');
+        return response()->json(['error' => false, 'sync' => $sync, 'estados' => $estados]);
     }
 
     private function opciones(Request $request): array

@@ -106,6 +106,7 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     $router->get('/pedidos/{id}/factura/preview', 'FacturaController@preview');
     $router->post('/pedidos/{id}/facturar', 'FacturaController@facturar');
     $router->get('/facturas', 'FacturaController@index');
+    $router->get('/facturas/email-estados', 'FacturaController@emailEstados');
     $router->get('/facturas/{id}', 'FacturaController@show');
     $router->get('/facturas/{id}/trazas', 'FacturaController@trazas');
     $router->post('/facturas/{id}/reenviar', 'FacturaController@reenviar');

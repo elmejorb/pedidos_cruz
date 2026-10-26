@@ -468,7 +468,7 @@ async function renderFacturas() {
         }
         tbody.innerHTML = list.map(f => f._tipo === 'nota' ? filaNota(f) : `
             <tr>
-                <td><strong class="fe-num">${feEsc(feNumero(f))}</strong>${f.email_enviado ? ' <i class="fas fa-envelope-circle-check" style="color:var(--success)" title="Enviada por email"></i>' : ''}</td>
+                <td><strong class="fe-num">${feEsc(feNumero(f))}</strong></td>
                 <td><a class="fe-link" onclick="viewPedido(${f.id_pedido})">${feEsc(f.pedido?.numero_pedido || '#' + f.id_pedido)}</a></td>
                 <td><div style="font-weight:600">${feEsc(f.cliente_nombre)}</div><div style="font-size:12px;color:var(--text-muted)">${feEsc(f.cliente_identificacion)}</div></td>
                 <td>${formatDate(f.fecha_emision || f.created_at)}</td>
@@ -483,13 +483,32 @@ async function renderFacturas() {
                     ${f.estado === 'autorizada' ? `
                         <button class="btn btn-ghost btn-sm" onclick="feImprimirCarta(${f.id_factura})" title="PDF carta"><i class="fas fa-file-pdf" style="color:#DC2626"></i></button>
                         <button class="btn btn-ghost btn-sm" onclick="feImprimirTicket(${f.id_factura})" title="Ticket 80mm"><i class="fas fa-receipt"></i></button>
-                        <button class="btn btn-ghost btn-sm" onclick="feEnviarEmail(${f.id_factura}, '${feEsc(f.cliente_email || '')}')" title="Enviar por email"><i class="fas fa-envelope"></i></button>`
+                        ${feEmailBoton(f)}`
                     : f.estado === 'anulada'
                         ? `<button class="btn btn-ghost btn-sm" onclick="feImprimirCarta(${f.id_factura})" title="PDF (anulada)"><i class="fas fa-file-pdf" style="color:var(--text-muted)"></i></button>`
                         : `<button class="btn btn-ghost btn-sm" onclick="feReintentar(${f.id_factura})" title="Reintentar envío"><i class="fas fa-rotate" style="color:var(--warning)"></i></button>`}
                 </td>
             </tr>`).join('');
     }
+
+    // Estado de los correos: se trae de la API después de mostrar el listado (no lo frena)
+    async function cargarEstadosEmail(forzar = false) {
+        const r = await api('/facturas/email-estados' + (forzar ? '?forzar=1' : ''));
+        if (!r || r.error || !document.getElementById('fe-tbody')) return;
+        let cambio = false;
+        facturas.forEach(f => {
+            const e = r.estados?.[f.id_factura];
+            if (e && (e.email_status !== f.email_status || e.email_enviado !== f.email_enviado || e.email_destinatario !== f.email_destinatario)) { Object.assign(f, e); cambio = true; }
+        });
+        if (cambio) renderTabla(filtrar());
+    }
+    const alEnviarEmail = ev => {
+        if (!document.getElementById('fe-tbody')) return window.removeEventListener('fe-email', alEnviarEmail);
+        const f = facturas.find(x => x.id_factura === ev.detail.id_factura);
+        if (f) { Object.assign(f, ev.detail); renderTabla(filtrar()); }
+    };
+    window.addEventListener('fe-email', alEnviarEmail);
+    setTimeout(() => cargarEstadosEmail(), 300);
 
     document.getElementById('fe-buscar').addEventListener('input', debounce(() => renderTabla(filtrar()), 250));
     document.getElementById('fe-chips').onclick = e => {
@@ -542,7 +561,7 @@ async function viewFactura(id, skipHash = false) {
             ${ok ? `
                 <button class="btn btn-outline btn-sm" onclick="feImprimirCarta(${f.id_factura})"><i class="fas fa-file-pdf"></i> PDF Carta</button>
                 <button class="btn btn-outline btn-sm" onclick="feImprimirTicket(${f.id_factura})"><i class="fas fa-receipt"></i> Ticket</button>
-                <button class="btn btn-outline btn-sm" onclick="feEnviarEmail(${f.id_factura}, '${feEsc(f.cliente_email || '')}')"><i class="fas fa-envelope"></i> Email</button>
+                <button class="btn btn-outline btn-sm" onclick="feEnviarEmail(${f.id_factura}, '${feEsc(f.cliente_email || '')}', ${!!f.email_enviado})"><i class="fas fa-envelope"></i> Email</button>
                 ${devuelto >= parseFloat(f.total) - 1
                     ? `<span class="badge-status badge-fe-nota" style="align-self:center"><i class="fas fa-check"></i> Totalmente devuelta</span>`
                     : `<button class="btn btn-sm fe-btn-anular" onclick="feAnular(${f.id_factura})"><i class="fas fa-file-circle-minus"></i> Nota Crédito</button>`}`
@@ -664,7 +683,7 @@ async function viewFactura(id, skipHash = false) {
                         <div class="info-row"><label>Medio de pago</label><span>${feEsc(feMedioPago(f.medio_pago))}</span></div>
                         <div class="info-row"><label>Emitida por</label><span>${feEsc(f.usuario?.nombre || '-')}</span></div>
                         <div class="info-row"><label>Vendedor</label><span>${feEsc(f.pedido?.vendedor?.nombre || '-')}</span></div>
-                        <div class="info-row"><label>Email</label><span>${f.email_enviado ? `<span style="color:var(--success)"><i class="fas fa-check"></i> Enviado</span>` : 'No enviado'}</span></div>
+                        <div class="info-row"><label>Correo</label><span>${feEmailBoton(f, true)}${f.email_destinatario || f.email_enviado ? `<div style="font-size:11.5px;color:var(--text-muted);margin-top:3px">${feEsc(f.email_destinatario || f.cliente_email || '')}${f.email_status_at ? ' · ' + formatDate(f.email_status_at) : ''}</div>` : ''}</span></div>
                         ${f.nota ? `<div style="margin-top:12px;padding:10px 12px;background:var(--bg);border-radius:var(--radius-sm);font-size:13px"><strong>Nota:</strong> ${feEsc(f.nota)}</div>` : ''}
                     </div>
                 </div>
@@ -706,22 +725,62 @@ async function feEliminarIntento(id) {
     else toast(data?.mensaje || 'Error', 'error');
 }
 
-function feEnviarEmail(id, emailActual = '') {
-    openModal('Enviar factura por email', `
+// ========================================
+// ESTADO DEL CORREO (lo reporta la API: Brevo / Resend)
+// ========================================
+const FE_EMAIL = {
+    enviado:           { icon: 'fa-paper-plane',            color: '#2563EB', bg: '#EFF6FF', label: 'Enviado' },
+    entregado:         { icon: 'fa-envelope-circle-check',  color: '#0891B2', bg: '#ECFEFF', label: 'Entregado' },
+    abierto:           { icon: 'fa-envelope-open',          color: '#16A34A', bg: '#F0FDF4', label: 'Abierto por el cliente' },
+    clic:              { icon: 'fa-envelope-open-text',     color: '#15803D', bg: '#DCFCE7', label: 'El cliente hizo clic en el enlace' },
+    diferido:          { icon: 'fa-clock',                  color: '#CA8A04', bg: '#FEFCE8', label: 'Diferido (reintentando)' },
+    rebote_temporal:   { icon: 'fa-triangle-exclamation',   color: '#D97706', bg: '#FFFBEB', label: 'Rebote temporal (buzón lleno o no disponible)' },
+    rebote_permanente: { icon: 'fa-circle-xmark',           color: '#DC2626', bg: '#FEF2F2', label: 'Rebote permanente (el correo no existe)' },
+    bloqueado:         { icon: 'fa-ban',                    color: '#DC2626', bg: '#FEF2F2', label: 'Bloqueado' },
+    spam:              { icon: 'fa-shield-virus',           color: '#DC2626', bg: '#FEF2F2', label: 'Marcado como spam' },
+    invalido:          { icon: 'fa-at',                     color: '#DC2626', bg: '#FEF2F2', label: 'Email inválido' },
+    desuscrito:        { icon: 'fa-user-slash',             color: '#EA580C', bg: '#FFF7ED', label: 'El cliente se desuscribió' },
+};
+
+function feEmailInfo(f) {
+    const st = FE_EMAIL[f.email_status] || (f.email_enviado ? FE_EMAIL.enviado : null);
+    if (st) return { ...st, clave: f.email_status || 'enviado', enviado: true };
+    if (!f.cliente_email) return { icon: 'fa-envelope', color: '#CBD5E1', bg: 'transparent', label: 'Sin enviar · el cliente no tiene email', clave: 'sin_email', enviado: false };
+    return { icon: 'fa-envelope', color: '#94A3B8', bg: 'transparent', label: 'No enviado', clave: 'no_enviado', enviado: false };
+}
+
+/** Botón-ícono del correo: el ícono y el color cambian según el estado; al tocarlo se envía/reenvía */
+function feEmailBoton(f, conTexto = false) {
+    const e = feEmailInfo(f);
+    const para = f.email_destinatario || f.cliente_email || '';
+    const title = e.label + (para ? ` — ${para}` : '') + (e.enviado ? ' · clic para reenviar' : ' · clic para enviar');
+    return `<button class="fe-mail ${e.clave}${conTexto ? ' con-texto' : ''}" style="--c:${e.color};--bg:${e.bg}" title="${feEsc(title)}"
+        onclick="feEnviarEmail(${f.id_factura}, '${feEsc(f.cliente_email || para)}', ${e.enviado})">
+        <i class="fas ${e.icon}"></i>${conTexto ? `<span>${feEsc(e.label)}</span>` : ''}</button>`;
+}
+
+function feEnviarEmail(id, emailActual = '', yaEnviado = false) {
+    openModal(yaEnviado ? 'Reenviar factura por email' : 'Enviar factura por email', `
         <p style="color:var(--text-secondary);margin-bottom:14px">Se enviará el PDF y el XML de la factura electrónica (AttachedDocument).</p>
         <div class="form-group"><label>Email del destinatario</label><input type="email" id="fe-email-dest" value="${feEsc(emailActual)}" placeholder="cliente@correo.com"></div>
+        <label class="fe-check"><input type="checkbox" id="fe-email-guardar" ${emailActual ? '' : 'checked'}> Guardar este email en la ficha del cliente</label>
+        ${yaEnviado ? '<p style="font-size:12px;color:var(--text-muted);margin-top:10px"><i class="fas fa-circle-info"></i> Esta factura ya se envió; se enviará de nuevo.</p>' : ''}
     `, `
         <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
-        <button class="btn btn-primary" id="fe-email-btn"><i class="fas fa-paper-plane"></i> Enviar</button>
+        <button class="btn btn-primary" id="fe-email-btn"><i class="fas fa-paper-plane"></i> ${yaEnviado ? 'Reenviar' : 'Enviar'}</button>
     `);
     document.getElementById('fe-email-btn').onclick = async () => {
         const email = document.getElementById('fe-email-dest').value.trim();
         if (!email) { toast('Ingresa un email', 'warning'); return; }
         const btn = document.getElementById('fe-email-btn');
         btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
-        const data = await api(`/facturas/${id}/email`, { method: 'POST', body: JSON.stringify({ email }) });
-        if (data && !data.error) { toast(data.mensaje || 'Email enviado'); closeModal(); }
-        else { toast(data?.mensaje || 'No se pudo enviar', 'error'); btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar'; }
+        const guardar_cliente = document.getElementById('fe-email-guardar').checked;
+        const data = await api(`/facturas/${id}/email`, { method: 'POST', body: JSON.stringify({ email, guardar_cliente }) });
+        if (data && !data.error) {
+            toast(data.mensaje || 'Email enviado');
+            closeModal();
+            if (data.email) window.dispatchEvent(new CustomEvent('fe-email', { detail: data.email }));
+        } else { toast(data?.mensaje || 'No se pudo enviar', 'error'); btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> ' + (yaEnviado ? 'Reenviar' : 'Enviar'); }
     };
 }
 

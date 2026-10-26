@@ -16,7 +16,7 @@ class Factura extends Model
         'forma_pago', 'medio_pago', 'dias_credito', 'fecha_vencimiento',
         'subtotal', 'iva', 'descuento', 'total', 'nota',
         'status_code', 'mensaje_dian', 'errores', 'request_json', 'response_json', 'intentos',
-        'email_enviado', 'email_enviado_at', 'id_usuario'
+        'email_enviado', 'email_enviado_at', 'email_status', 'email_destinatario', 'email_status_at', 'id_usuario'
     ];
 
     protected $casts = [
