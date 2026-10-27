@@ -98,6 +98,40 @@ function closeModal() {
     document.getElementById('modal-overlay').classList.remove('show');
 }
 
+// ========================================
+// DATOS DE LA EMPRESA (para tickets e impresiones)
+// Se guardan en el dispositivo para poder imprimir sin internet.
+// ========================================
+function empresaCache() {
+    try { return JSON.parse(localStorage.getItem('pc_empresa') || 'null'); } catch (e) { return null; }
+}
+async function cargarEmpresa() {
+    const r = await api('/empresa');
+    if (r && !r.error && r.empresa) {
+        try { localStorage.setItem('pc_empresa', JSON.stringify(r.empresa)); } catch (e) { }
+        return r.empresa;
+    }
+    return empresaCache();
+}
+const escHTML = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/** Encabezado de ticket 80mm con el nombre y los datos reales de la empresa */
+function encabezadoEmpresaTicket(e) {
+    if (!e || !e.nombre) {
+        return `<div class="center bold" style="font-size:18px;margin-bottom:2px">PEDIDOS CRUZ</div>
+            <div class="center" style="font-size:11px;margin-bottom:8px">Sistema de Gestión de Pedidos</div>`;
+    }
+    return `
+        ${e.logo_url ? `<div class="center" style="margin-bottom:4px"><img src="${escHTML(e.logo_url)}" style="max-width:40mm;max-height:20mm"></div>` : ''}
+        <div class="center bold" style="font-size:18px;margin-bottom:2px">${escHTML(e.nombre)}</div>
+        ${e.propietario ? `<div class="center" style="font-size:12px">${escHTML(e.propietario)}</div>` : ''}
+        ${e.nit ? `<div class="center" style="font-size:12px">NIT ${escHTML(e.nit)}</div>` : ''}
+        ${e.direccion ? `<div class="center" style="font-size:12px">${escHTML(e.direccion)}</div>` : ''}
+        ${e.ciudad ? `<div class="center" style="font-size:12px">${escHTML(e.ciudad)}</div>` : ''}
+        ${e.telefono ? `<div class="center" style="font-size:12px">Tel: ${escHTML(e.telefono)}</div>` : ''}
+        ${e.regimen ? `<div class="center" style="font-size:11px;margin-bottom:4px">${escHTML(e.regimen)}</div>` : ''}`;
+}
+
 /**
  * Modal de confirmación (reemplaza confirm()). Se muestra encima de cualquier modal abierto.
  * tipo: 'danger' | 'warning' | 'primary' | 'dian'. Devuelve Promise<boolean>.
@@ -1170,7 +1204,7 @@ window._editarPedido = async (id) => {
 };
 
 window._printTicket = async (id) => {
-    const data = await api(`/pedidos/${id}`);
+    const [data, empresa] = await Promise.all([api(`/pedidos/${id}`), cargarEmpresa()]);
     if (!data || data.error) return;
     const p = data.pedido;
 
@@ -1216,11 +1250,11 @@ window._printTicket = async (id) => {
             </style>
         </head>
         <body>
-            <div class="center bold" style="font-size:18px;margin-bottom:2px">PEDIDOS CRUZ</div>
-            <div class="center" style="font-size:11px;margin-bottom:8px">Sistema de Gestión de Pedidos</div>
+            ${encabezadoEmpresaTicket(empresa)}
             <div class="divider"></div>
 
-            <div class="center bold" style="font-size:15px;margin:6px 0">${p.numero_pedido}</div>
+            <div class="center bold" style="font-size:13px;margin-top:6px">PEDIDO</div>
+            <div class="center bold" style="font-size:15px;margin:2px 0 6px">${p.numero_pedido}</div>
             <div style="font-size:12px">
                 <div>Fecha: ${formatDate(p.fecha_pedido)}</div>
                 <div>Estado: ${p.estado.toUpperCase()}</div>
@@ -3529,7 +3563,7 @@ function printHTML(bodyContent) {
         </head>
         <body>
             <div class="print-header">
-                <h2>Pedidos Cruz</h2>
+                <h2>${escHTML(empresaCache()?.nombre || 'Pedidos Cruz')}${empresaCache()?.nit ? `<span style="display:block;font-size:12px;font-weight:500;color:#666">NIT ${escHTML(empresaCache().nit)}</span>` : ''}</h2>
                 <span>${new Date().toLocaleDateString('es-CO')}</span>
             </div>
             ${bodyContent}
@@ -3595,6 +3629,8 @@ function initApp() {
     document.querySelectorAll('.nav-admin-only').forEach(el => {
         el.style.display = isAdmin ? '' : 'none';
     });
+
+    cargarEmpresa();
 
     // Route from URL hash, or resume cart, or default by role
     const routed = handleHashRoute();

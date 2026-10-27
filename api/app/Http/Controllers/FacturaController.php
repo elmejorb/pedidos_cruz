@@ -276,6 +276,28 @@ class FacturaController extends Controller
 
     // ---------------- Configuración ----------------
 
+    /** Datos públicos de la empresa para tickets e impresiones (sin credenciales). Cualquier usuario. */
+    public function empresa(Request $request)
+    {
+        if (!Schema::hasTable('pc_config_fe')) return response()->json(['error' => false, 'empresa' => null]);
+        $e = ConfigFe::actual();
+        $ciudad = $e->id_municipio_default ? DB::table('pc_dian_municipios as m')
+            ->join('pc_dian_departamentos as d', 'd.id', '=', 'm.department_id')
+            ->where('m.id', $e->id_municipio_default)
+            ->selectRaw("CONCAT(TRIM(m.name), ' - ', TRIM(d.name)) as ciudad")->value('ciudad') : null;
+        return response()->json(['error' => false, 'empresa' => [
+            'nombre' => $e->empresa_nombre,
+            'propietario' => $e->empresa_propietario,
+            'nit' => $e->empresa_nit,
+            'direccion' => $e->empresa_direccion,
+            'ciudad' => $ciudad,
+            'telefono' => $e->empresa_telefono,
+            'email' => $e->empresa_email,
+            'regimen' => $e->empresa_regimen,
+            'logo_url' => $e->empresa_logo_url,
+        ]]);
+    }
+
     public function config(Request $request)
     {
         if ($r = $this->soloAdmin($request)) return $r;

@@ -1121,10 +1121,9 @@ async function feImprimirTicket(id) {
         body{font-family:Arial,sans-serif;font-size:12px;color:#000}
         .t{width:72mm;padding:2mm}
         .c{text-align:center}.b{font-weight:700}.big{font-size:14px}
-        .it{padding:3px 0;border-bottom:1px dotted #999}
-        .it:last-of-type{border-bottom:none}
-        .it-nom{font-size:13px;font-weight:700;line-height:1.25}
-        .it-val{font-size:12.5px;margin-top:1px}
+        .it{padding:6px 0 7px;page-break-inside:avoid;break-inside:avoid}
+        .it-nom{font-size:13px;font-weight:700;line-height:1.3}
+        .it-val{font-size:12.5px;margin-top:3px}
         .row{display:flex;justify-content:space-between;gap:6px}
         hr{border:none;border-top:1px dashed #000;margin:5px 0}
         .logo{max-width:40mm;max-height:20mm}

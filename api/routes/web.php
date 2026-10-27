@@ -114,6 +114,7 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     $router->post('/facturas/{id}/anular', 'FacturaController@anular');
     $router->post('/facturas/{id}/nota-credito', 'FacturaController@notaCredito');
     $router->delete('/facturas/{id}', 'FacturaController@destroy');
+    $router->get('/empresa', 'FacturaController@empresa');
     $router->get('/config-fe', 'FacturaController@config');
     $router->put('/config-fe', 'FacturaController@guardarConfig');
     $router->post('/config-fe/probar', 'FacturaController@probarConexion');
