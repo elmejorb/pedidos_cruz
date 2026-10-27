@@ -367,6 +367,10 @@ class FacturacionElectronicaService
         $errores = self::extraerErrores($body, $res);
         $esRechazoDian = isset($body['status_code']) || isset($body['errors']);
         $mensaje = $body['error'] ?? $body['message'] ?? ($res['error'] ?? "Respuesta inválida de la API (HTTP {$res['http']})");
+        // Si la DIAN dio un motivo concreto, ese es el mensaje que debe verse en el listado
+        if ($esRechazoDian && !empty($errores[0]['message']) && $errores[0]['message'] !== $mensaje) {
+            $mensaje = (is_string($mensaje) ? rtrim($mensaje, '. ') . ': ' : '') . $errores[0]['message'];
+        }
 
         $factura->fill([
             'estado' => $esRechazoDian ? 'rechazada' : 'error',
@@ -685,6 +689,8 @@ class FacturacionElectronicaService
         $mensaje = $body['error'] ?? $body['message'] ?? ($res['error'] ?? "Respuesta inválida de la API (HTTP {$res['http']})");
         if (is_string($mensaje) && stripos($mensaje, 'resolución activa') !== false) {
             $mensaje .= '. Falta configurar en la API una resolución activa de Nota Crédito para esta empresa.';
+        } elseif ((isset($body['respuesta_dian']) || isset($body['status_code'])) && !empty($errores[0]['message']) && $errores[0]['message'] !== $mensaje) {
+            $mensaje = (is_string($mensaje) ? rtrim($mensaje, '. ') . ': ' : '') . $errores[0]['message'];
         }
         $nota->fill([
             'estado' => isset($body['respuesta_dian']) || isset($body['status_code']) ? 'rechazada' : 'error',
@@ -1015,8 +1021,18 @@ class FacturacionElectronicaService
             }
             if ($out) return $out;
         }
-        $msg = $body['error'] ?? $body['message'] ?? $body['status_description'] ?? 'Error desconocido';
-        return [['code' => $body['status_code'] ?? '', 'message' => is_string($msg) ? $msg : json_encode($msg)]];
+        // Sin lista de reglas (ej. código 89): el motivo real viene en status_description de la DIAN
+        $desc = $body['status_description'] ?? ($soap['StatusDescription'] ?? null);
+        $codigo = (string) ($body['status_code'] ?? ($soap['StatusCode'] ?? ''));
+        if (is_string($desc) && trim($desc) !== '' && stripos($desc, 'procesado correctamente') === false) {
+            $out = [['code' => $codigo, 'message' => trim($desc)]];
+            if ($codigo === '89') {
+                $out[] = ['code' => 'AYUDA', 'message' => 'La DIAN no reconoce el software o certificado con que se firmó: revise en la API DIAN la configuración de la empresa (software, PIN y certificado del emisor).'];
+            }
+            return $out;
+        }
+        $msg = $body['error'] ?? $body['message'] ?? $desc ?? 'Error desconocido';
+        return [['code' => $codigo, 'message' => is_string($msg) ? $msg : json_encode($msg)]];
     }
 
     /** Municipio del cliente: id explícito → nombre de la ciudad → default de configuración. */
