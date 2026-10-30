@@ -2209,6 +2209,8 @@ body {
 .precio-ref i { font-size: 10px; margin-right: 3px; }
 .precio-ref.ultimo { color: #047857; }
 .precio-inv { font-size: 11px; font-weight: 500; color: var(--text-muted); margin-left: 4px; }
+.precio-ult-nota { display: block; margin-top: 2px; font-size: 11px; font-weight: 500; color: var(--text-muted); white-space: nowrap; }
+.precio-ult-nota i { font-size: 9.5px; margin-right: 2px; }
 .precio-ult-chip { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 5px; border-radius: 50%; background: #D1FAE5; color: #047857; font-size: 9px; vertical-align: middle; }
 
 /* Modal de confirmación (reemplaza confirm()) */

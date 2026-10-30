@@ -2112,11 +2112,12 @@ function precioRefTag(item) {
         : `<div class="precio-ref"><i class="fas fa-tag"></i> Precio de inventario</div>`;
 }
 
+/** Muestra el precio real (inventario); el último precio del cliente va como nota pequeña y se aplica al agregar al carrito */
 function precioClienteHTML(prod, precios) {
     const { precio, ref } = precioCliente(prod, precios);
-    if (!ref) return `$${formatNumber(precio)}`;
-    const distinto = Math.abs(precio - parseFloat(prod.precio)) > 0.5;
-    return `$${formatNumber(precio)}${distinto ? ` <s class="precio-inv">$${formatNumber(prod.precio)}</s>` : ''}<span class="precio-ult-chip" title="Último precio vendido a este cliente"><i class="fas fa-clock-rotate-left"></i></span>`;
+    const real = `$${formatNumber(prod.precio)}`;
+    if (!ref) return real;
+    return `${real}<span class="precio-ult-nota" title="Al agregarlo al pedido se usa el último precio que se le vendió a este cliente"><i class="fas fa-clock-rotate-left"></i> Último: $${formatNumber(precio)}</span>`;
 }
 
 function esProductoNuevo(p) {
