@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Models\Catalogo;
 use App\Models\Proveedor;
 
@@ -117,6 +118,20 @@ class CatalogoAdminController extends Controller
         $q = Proveedor::where('activo', 1)->orderBy('nombre');
         if ($request->usuario->rol === 'admin') {
             $q->withCount(['productos' => fn($p) => $p->where('activo', 1)]);
+            if (Schema::hasTable('pc_compras')) {
+                // Cartera del proveedor: saldo por pagar, vencido y última compra
+                $hoy = date('Y-m-d');
+                $q->addSelect([
+                    'saldo' => DB::table('pc_compras')->selectRaw('COALESCE(SUM(saldo),0)')
+                        ->whereColumn('pc_compras.id_proveedor', 'pc_proveedores.id_proveedor')->where('estado', 'recibida'),
+                    'vencido' => DB::table('pc_compras')->selectRaw('COALESCE(SUM(saldo),0)')
+                        ->whereColumn('pc_compras.id_proveedor', 'pc_proveedores.id_proveedor')->where('estado', 'recibida')->where('fecha_vencimiento', '<', $hoy),
+                    'compras_count' => DB::table('pc_compras')->selectRaw('COUNT(*)')
+                        ->whereColumn('pc_compras.id_proveedor', 'pc_proveedores.id_proveedor')->where('estado', 'recibida'),
+                    'ultima_compra' => DB::table('pc_compras')->selectRaw('MAX(fecha)')
+                        ->whereColumn('pc_compras.id_proveedor', 'pc_proveedores.id_proveedor')->where('estado', 'recibida'),
+                ]);
+            }
         }
         return response()->json(['error' => false, 'proveedores' => $q->get()]);
     }

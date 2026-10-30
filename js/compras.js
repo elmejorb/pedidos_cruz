@@ -22,6 +22,7 @@ function comAccion(texto, fn) {
     const b = document.getElementById('header-action-btn');
     if (!texto) { b.style.display = 'none'; return; }
     b.style.display = '';
+    b.title = texto;
     document.getElementById('header-action-text').textContent = texto;
     b.onclick = fn;
 }
@@ -174,6 +175,9 @@ async function comFormulario(idCompra) {
         let b = null;
         try { b = JSON.parse(localStorage.getItem(COM_BORRADOR) || 'null'); } catch (e) { }
         F = b || { id: null, id_proveedor: '', factura_proveedor: '', fecha: comHoy(), forma_pago: 'contado', dias_credito: 30, medio_pago: 'efectivo', iva_incluido: true, descuento: '', flete: '', retencion: '', notas: '', items: [] };
+        // Desde Proveedores → "Nueva compra" llega el proveedor escogido
+        const pre = sessionStorage.getItem('pc_compra_prov');
+        if (pre) { sessionStorage.removeItem('pc_compra_prov'); if (!F.items.length || !F.id_proveedor) F.id_proveedor = pre; }
     }
 
     const guardarBorrador = () => {
@@ -473,7 +477,7 @@ async function comDetalle(id) {
                 </div>
             </div>
             ${anulada ? `<div class="fe-alert danger" style="margin-bottom:14px"><div class="fe-alert-title"><i class="fas fa-ban"></i> Compra anulada</div>${comEsc(x.motivo_anulacion || '')} · ${comEsc(x.usuario_anula || '')} · ${formatDate(x.anulada_at)}. El stock de esta compra se descontó.</div>` : ''}
-            ${x.tiene_abonos && !anulada ? `<div class="fe-alert warning" style="margin-bottom:14px"><i class="fas fa-circle-info"></i> Esta compra tiene abonos: para editarla o anularla primero anula esos pagos en Cuentas por pagar.</div>` : ''}
+            ${x.tiene_abonos && !anulada ? `<div class="fe-alert warning" style="margin-bottom:14px"><i class="fas fa-circle-info"></i> Esta compra tiene abonos: para editarla o anularla primero anula esos pagos en Cartera de proveedores.</div>` : ''}
 
             <div class="com-det-grid">
                 <div class="card"><div class="card-header"><h3>Productos (${x.detalles.length})</h3></div>
@@ -612,8 +616,9 @@ async function comEstadoCuenta(idProveedor) {
     c.innerHTML = `
         <div class="fade-in">
             <div class="cont-head">
-                <button class="btn btn-ghost btn-sm" onclick="comIrA('#/cuentas-pagar')"><i class="fas fa-arrow-left"></i> Cuentas por pagar</button>
+                <button class="btn btn-ghost btn-sm" onclick="comIrA('#/cuentas-pagar')"><i class="fas fa-arrow-left"></i> Cartera proveedores</button>
                 <div class="cont-head-info"><h2>${comEsc(pv.nombre)}</h2><span>${pv.nit ? 'NIT ' + comEsc(pv.nit) : ''}${pv.telefono ? ' · ' + comEsc(pv.telefono) : ''}${pv.contacto ? ' · ' + comEsc(pv.contacto) : ''}</span></div>
+                <div class="cont-head-actions"><button class="btn btn-outline btn-sm" onclick="comNuevaCompraDe(${idProveedor})"><i class="fas fa-cart-plus"></i> Nueva compra</button></div>
             </div>
             <div class="com-cxp-grid">
                 <div class="card"><div class="card-header"><h3>Facturas pendientes</h3><span style="font-size:13px;color:var(--text-muted)">Saldo total <b style="color:#B45309">${comMoney(d.pendientes.reduce((s, f) => s + +f.saldo, 0))}</b></span></div>
@@ -732,4 +737,65 @@ async function comComprobantes() {
             <td style="text-align:right"><b>${comMoney(f.reduce((s, p) => s + +p.valor, 0))}</b></td><td><button class="btn btn-ghost btn-sm" onclick="comImprimirComprobante(${k})"><i class="fas fa-print"></i></button></td></tr>`).join('')}</tbody></table></div>`
         : '<div class="empty-state"><i class="fas fa-receipt"></i><p>No hay pagos este mes.</p></div>', '<button class="btn btn-primary" onclick="closeModal()">Cerrar</button>');
     if (typeof feModalWide === 'function') feModalWide();
+}
+
+// ========================================
+// PROVEEDORES (como Clientes)
+// ========================================
+function comNuevaCompraDe(idProveedor) {
+    sessionStorage.setItem('pc_compra_prov', String(idProveedor));
+    comIrA('#/compras/nueva');
+}
+
+async function renderProveedores() {
+    comAccion('Nuevo proveedor', () => catProveedor(null, () => renderProveedores()));
+    const c = document.getElementById('page-container');
+    const l = await catCargarListas(true);
+    const lista = l.proveedores || [];
+    const hoy = comHoy();
+    const conSaldo = lista.filter(p => parseFloat(p.saldo) > 0);
+    let buscar = sessionStorage.getItem('pc_prov_buscar') || '';
+
+    c.innerHTML = `
+        <div class="fade-in">
+            <div class="stats-grid">
+                <div class="stat-card blue"><div class="stat-icon blue"><i class="fas fa-truck-field"></i></div><div class="stat-info"><h4>Proveedores</h4><div class="stat-value">${lista.length}</div></div></div>
+                <div class="stat-card orange" style="cursor:pointer" onclick="comIrA('#/cuentas-pagar')"><div class="stat-icon orange"><i class="fas fa-file-invoice-dollar"></i></div><div class="stat-info"><h4>Por pagar</h4><div class="stat-value">${comMoney(lista.reduce((s, p) => s + (parseFloat(p.saldo) || 0), 0))}</div><div class="cr-stat-sub">${conSaldo.length} proveedor(es) con saldo</div></div></div>
+                <div class="stat-card red"><div class="stat-icon red"><i class="fas fa-calendar-xmark"></i></div><div class="stat-info"><h4>Vencido</h4><div class="stat-value">${comMoney(lista.reduce((s, p) => s + (parseFloat(p.vencido) || 0), 0))}</div></div></div>
+                <div class="stat-card green"><div class="stat-icon green"><i class="fas fa-boxes-stacked"></i></div><div class="stat-info"><h4>Productos asignados</h4><div class="stat-value">${lista.reduce((s, p) => s + (parseInt(p.productos_count) || 0), 0)}</div></div></div>
+            </div>
+            <div class="card" style="margin-top:16px">
+                <div class="card-body" style="padding-bottom:0">
+                    <div class="search-box"><input type="text" id="pv-buscar" placeholder="Buscar por nombre, NIT, teléfono o contacto..." value="${comEsc(buscar)}"><i class="fas fa-search"></i></div>
+                </div>
+                <div class="table-wrapper"><table class="data-table">
+                    <thead><tr><th>Proveedor</th><th>Contacto</th><th style="text-align:right">Productos</th><th>Compras</th><th style="text-align:right">Saldo por pagar</th><th>Acciones</th></tr></thead>
+                    <tbody id="pv-tbody"></tbody>
+                </table></div>
+            </div>
+        </div>`;
+
+    function pintar() {
+        const t = buscar.toLowerCase();
+        const l2 = !t ? lista : lista.filter(p => [p.nombre, p.nit, p.telefono, p.contacto, p.email].some(v => String(v || '').toLowerCase().includes(t)));
+        document.getElementById('pv-tbody').innerHTML = l2.length ? l2.map(p => {
+            const saldo = parseFloat(p.saldo) || 0, venc = parseFloat(p.vencido) || 0;
+            return `<tr>
+                <td><div style="font-weight:600">${comEsc(p.nombre)}</div><div style="font-size:12px;color:var(--text-muted)">${p.nit ? 'NIT ' + comEsc(p.nit) : 'Sin NIT'}${p.direccion ? ' · ' + comEsc(p.direccion) : ''}</div></td>
+                <td style="font-size:13px">${comEsc(p.contacto || '')}${p.telefono ? `<div><a href="tel:${comEsc(p.telefono)}" class="fe-link"><i class="fas fa-phone" style="font-size:11px"></i> ${comEsc(p.telefono)}</a></div>` : ''}${p.email ? `<div style="font-size:12px;color:var(--text-muted)">${comEsc(p.email)}</div>` : ''}${!p.contacto && !p.telefono && !p.email ? '<span style="color:var(--text-muted)">-</span>' : ''}</td>
+                <td style="text-align:right">${p.productos_count || 0}</td>
+                <td style="font-size:13px">${parseInt(p.compras_count) ? `${p.compras_count} · última ${comFecha(p.ultima_compra)}` : '<span style="color:var(--text-muted)">Sin compras</span>'}</td>
+                <td style="text-align:right">${saldo > 0 ? `<b style="color:${venc > 0 ? 'var(--danger)' : '#B45309'}">${comMoney(saldo)}</b>${venc > 0 ? `<div style="font-size:11.5px;color:var(--danger)">${comMoney(venc)} vencido</div>` : ''}` : '<span style="color:var(--text-muted)">Al día</span>'}</td>
+                <td style="white-space:nowrap">
+                    <button class="btn btn-ghost btn-sm" onclick="comNuevaCompraDe(${p.id_proveedor})" title="Nueva compra a este proveedor"><i class="fas fa-cart-plus" style="color:var(--primary)"></i></button>
+                    ${saldo > 0 ? `<button class="btn btn-primary btn-sm" onclick="comIrA('#/cuentas-pagar/${p.id_proveedor}')" title="Pagar"><i class="fas fa-hand-holding-dollar"></i> Pagar</button>`
+                        : `<button class="btn btn-ghost btn-sm" onclick="comIrA('#/cuentas-pagar/${p.id_proveedor}')" title="Cartera y pagos"><i class="fas fa-file-invoice-dollar"></i></button>`}
+                    <button class="btn btn-ghost btn-sm" onclick="catProveedor(${p.id_proveedor}, () => renderProveedores())" title="Editar"><i class="fas fa-pen"></i></button>
+                    <button class="btn btn-ghost btn-sm" onclick="catEliminarProveedor(${p.id_proveedor}, () => renderProveedores())" title="Eliminar" ${saldo > 0 ? 'disabled' : ''}><i class="fas fa-trash-alt" style="color:var(--danger)"></i></button>
+                </td>
+            </tr>`;
+        }).join('') : `<tr><td colspan="6"><div class="empty-state"><i class="fas fa-truck-field"></i><h3>${lista.length ? 'Sin resultados' : 'Aún no hay proveedores'}</h3>${lista.length ? '' : '<p>Crea el primero con el botón <b>Nuevo proveedor</b>.</p>'}</div></td></tr>`;
+    }
+    document.getElementById('pv-buscar').addEventListener('input', debounce(e => { buscar = e.target.value.trim(); sessionStorage.setItem('pc_prov_buscar', buscar); pintar(); }, 200));
+    pintar();
 }

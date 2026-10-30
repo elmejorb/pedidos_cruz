@@ -349,14 +349,15 @@ function navigateTo(page, options = {}) {
         'catalogos': 'Catálogos',
         'conteo': 'Conteo de Inventario',
         'compras': 'Compras',
-        'cuentas-pagar': 'Cuentas por Pagar',
+        'cuentas-pagar': 'Cartera de Proveedores',
+        'proveedores': 'Proveedores',
         'config-fe': 'Configuración Facturación Electrónica',
     };
 
     document.getElementById('header-title').textContent = titles[page] || 'Pedidos Cruz';
 
     // Block admin-only pages for vendedores
-    const adminPages = ['usuarios', 'categorias', 'productos', 'reportes', 'dashboard', 'rutas', 'despacho', 'facturas', 'config-fe', 'conteo', 'compras', 'cuentas-pagar'];
+    const adminPages = ['usuarios', 'categorias', 'productos', 'reportes', 'dashboard', 'rutas', 'despacho', 'facturas', 'config-fe', 'conteo', 'compras', 'cuentas-pagar', 'proveedores'];
     if (adminPages.includes(page) && state.usuario?.rol !== 'admin') {
         const container = document.getElementById('page-container');
         container.innerHTML = '<div class="empty-state"><i class="fas fa-lock"></i><h3>Acceso restringido</h3><p>No tienes permisos para acceder a esta sección</p></div>';
@@ -385,6 +386,7 @@ function navigateTo(page, options = {}) {
         'conteo': renderConteo,
         'compras': renderCompras,
         'cuentas-pagar': renderCuentasPagar,
+        'proveedores': renderProveedores,
         'config-fe': renderConfigFE,
     };
 
@@ -3666,7 +3668,7 @@ function handleHashRoute() {
         return true;
     }
 
-    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho', 'facturas', 'config-fe', 'cartera', 'catalogos', 'conteo', 'compras', 'cuentas-pagar'];
+    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho', 'facturas', 'config-fe', 'cartera', 'catalogos', 'conteo', 'compras', 'cuentas-pagar', 'proveedores'];
     if (validPages.includes(page)) {
         navigateTo(page, { skipHash: true });
         return true;

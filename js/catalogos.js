@@ -448,9 +448,9 @@ function catProveedor(id, alGuardar = null) {
     };
 }
 
-async function catEliminarProveedor(id) {
-    const p = CAT.proveedores.find(x => x.id_proveedor === id);
+async function catEliminarProveedor(id, alTerminar = null) {
+    const p = (CAT.proveedores || []).find(x => x.id_proveedor === id);
     if (!(await confirmar('Sus productos quedarán sin proveedor asignado.', { titulo: `¿Eliminar el proveedor "${p?.nombre}"?`, ok: 'Eliminar', tipo: 'danger' }))) return;
     const r = await api(`/proveedores/${id}`, { method: 'DELETE' });
-    if (r && !r.error) { toast('Proveedor eliminado'); renderCatalogos(); } else toast(r?.mensaje || 'Error', 'error');
+    if (r && !r.error) { toast('Proveedor eliminado'); CAT.proveedores = null; if (alTerminar) alTerminar(); else renderCatalogos(); } else toast(r?.mensaje || 'Error', 'error');
 }
