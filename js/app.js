@@ -348,13 +348,15 @@ function navigateTo(page, options = {}) {
         'cartera': 'Cartera y Pagos',
         'catalogos': 'Catálogos',
         'conteo': 'Conteo de Inventario',
+        'compras': 'Compras',
+        'cuentas-pagar': 'Cuentas por Pagar',
         'config-fe': 'Configuración Facturación Electrónica',
     };
 
     document.getElementById('header-title').textContent = titles[page] || 'Pedidos Cruz';
 
     // Block admin-only pages for vendedores
-    const adminPages = ['usuarios', 'categorias', 'productos', 'reportes', 'dashboard', 'rutas', 'despacho', 'facturas', 'config-fe', 'conteo'];
+    const adminPages = ['usuarios', 'categorias', 'productos', 'reportes', 'dashboard', 'rutas', 'despacho', 'facturas', 'config-fe', 'conteo', 'compras', 'cuentas-pagar'];
     if (adminPages.includes(page) && state.usuario?.rol !== 'admin') {
         const container = document.getElementById('page-container');
         container.innerHTML = '<div class="empty-state"><i class="fas fa-lock"></i><h3>Acceso restringido</h3><p>No tienes permisos para acceder a esta sección</p></div>';
@@ -381,6 +383,8 @@ function navigateTo(page, options = {}) {
         'cartera': renderCartera,
         'catalogos': renderCatalogos,
         'conteo': renderConteo,
+        'compras': renderCompras,
+        'cuentas-pagar': renderCuentasPagar,
         'config-fe': renderConfigFE,
     };
 
@@ -3662,7 +3666,7 @@ function handleHashRoute() {
         return true;
     }
 
-    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho', 'facturas', 'config-fe', 'cartera', 'catalogos', 'conteo'];
+    const validPages = ['dashboard', 'pedidos', 'nuevo-pedido', 'clientes', 'productos', 'reportes', 'usuarios', 'categorias', 'perfil', 'rutas', 'despacho', 'facturas', 'config-fe', 'cartera', 'catalogos', 'conteo', 'compras', 'cuentas-pagar'];
     if (validPages.includes(page)) {
         navigateTo(page, { skipHash: true });
         return true;

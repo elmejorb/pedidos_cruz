@@ -9,7 +9,7 @@ class Proveedor extends Model
     protected $table = 'pc_proveedores';
     protected $primaryKey = 'id_proveedor';
 
-    protected $fillable = ['nombre', 'nit', 'telefono', 'contacto', 'activo'];
+    protected $fillable = ['nombre', 'nit', 'telefono', 'contacto', 'direccion', 'email', 'activo'];
 
     public function productos()
     {

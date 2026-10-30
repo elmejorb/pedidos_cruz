@@ -127,7 +127,7 @@ class CatalogoAdminController extends Controller
         $this->validate($request, ['nombre' => 'required|string|max:150']);
         $p = $id ? Proveedor::find($id) : new Proveedor(['activo' => 1]);
         if (!$p) return response()->json(['error' => true, 'mensaje' => 'Proveedor no encontrado'], 404);
-        $p->fill($request->only(['nombre', 'nit', 'telefono', 'contacto']))->save();
+        $p->fill($request->only(['nombre', 'nit', 'telefono', 'contacto', 'direccion', 'email']))->save();
         return response()->json(['error' => false, 'mensaje' => $id ? 'Proveedor actualizado' : 'Proveedor creado', 'proveedor' => $p], $id ? 200 : 201);
     }
 

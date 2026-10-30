@@ -82,6 +82,17 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     $router->put('/conteos/{id}/item', 'ConteoController@guardarItem');
     $router->post('/conteos/{id}/aplicar', 'ConteoController@aplicar');
     $router->post('/conteos/{id}/cancelar', 'ConteoController@cancelar');
+    // Compras y cuentas por pagar
+    $router->get('/compras', 'CompraController@index');
+    $router->post('/compras', 'CompraController@store');
+    $router->get('/compras/{id}', 'CompraController@show');
+    $router->put('/compras/{id}', 'CompraController@update');
+    $router->post('/compras/{id}/anular', 'CompraController@anular');
+    $router->get('/cuentas-pagar', 'CompraController@cuentasPagar');
+    $router->get('/cuentas-pagar/{idProveedor}', 'CompraController@estadoCuenta');
+    $router->get('/pagos-proveedor', 'CompraController@pagos');
+    $router->post('/pagos-proveedor', 'CompraController@registrarPago');
+    $router->post('/pagos-proveedor/{comprobante}/anular', 'CompraController@anularPago');
     // Catálogos y proveedores
     $router->get('/catalogos', 'CatalogoAdminController@index');
     $router->post('/catalogos', 'CatalogoAdminController@store');

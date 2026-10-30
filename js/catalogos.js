@@ -418,24 +418,33 @@ async function catAsignarProductos(id) {
 }
 
 // ---------- Proveedores ----------
-function catProveedor(id) {
-    const p = id ? CAT.proveedores.find(x => x.id_proveedor === id) : {};
+/** alGuardar(proveedor): por defecto recarga Catálogos; Compras lo usa para seleccionar el proveedor creado */
+function catProveedor(id, alGuardar = null) {
+    const p = id ? (CAT.proveedores || []).find(x => x.id_proveedor === id) || {} : {};
     openModal(id ? 'Editar proveedor' : 'Nuevo proveedor', `
         <div class="form-group"><label>Nombre *</label><input type="text" id="pv-nombre" value="${catEsc(p.nombre || '')}"></div>
         <div class="grid-2">
             <div class="form-group"><label>NIT</label><input type="text" id="pv-nit" value="${catEsc(p.nit || '')}"></div>
             <div class="form-group"><label>Teléfono</label><input type="text" id="pv-tel" value="${catEsc(p.telefono || '')}"></div>
         </div>
-        <div class="form-group" style="margin-bottom:0"><label>Contacto</label><input type="text" id="pv-contacto" value="${catEsc(p.contacto || '')}" placeholder="Nombre del asesor"></div>
+        <div class="grid-2">
+            <div class="form-group"><label>Contacto</label><input type="text" id="pv-contacto" value="${catEsc(p.contacto || '')}" placeholder="Nombre del asesor"></div>
+            <div class="form-group"><label>Email</label><input type="email" id="pv-email" value="${catEsc(p.email || '')}" placeholder="proveedor@correo.com"></div>
+        </div>
+        <div class="form-group" style="margin-bottom:0"><label>Dirección</label><input type="text" id="pv-dir" value="${catEsc(p.direccion || '')}"></div>
     `, `
         <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
         <button class="btn btn-primary" id="pv-guardar"><i class="fas fa-save"></i> Guardar</button>
     `);
     document.getElementById('pv-guardar').onclick = async () => {
-        const body = { nombre: document.getElementById('pv-nombre').value.trim(), nit: document.getElementById('pv-nit').value.trim(), telefono: document.getElementById('pv-tel').value.trim(), contacto: document.getElementById('pv-contacto').value.trim() };
+        const body = { nombre: document.getElementById('pv-nombre').value.trim(), nit: document.getElementById('pv-nit').value.trim(), telefono: document.getElementById('pv-tel').value.trim(), contacto: document.getElementById('pv-contacto').value.trim(), email: document.getElementById('pv-email').value.trim(), direccion: document.getElementById('pv-dir').value.trim() };
         if (!body.nombre) { toast('El nombre es requerido', 'warning'); return; }
         const r = await api(id ? `/proveedores/${id}` : '/proveedores', { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) });
-        if (r && !r.error) { toast(r.mensaje); closeModal(); renderCatalogos(); } else toast(r?.mensaje || 'Error', 'error');
+        if (r && !r.error) {
+            toast(r.mensaje); closeModal();
+            CAT.proveedores = null; // se recarga la lista la próxima vez
+            if (alGuardar) alGuardar(r.proveedor); else renderCatalogos();
+        } else toast(r?.mensaje || 'Error', 'error');
     };
 }
 

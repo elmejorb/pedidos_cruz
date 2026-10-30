@@ -11,7 +11,7 @@
     <title>Pedidos Cruz - Sistema de Gestión de Pedidos</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="css/app.css?v=31">
+    <link rel="stylesheet" href="css/app.css?v=32">
 </head>
 <body>
 
@@ -123,6 +123,17 @@
                         <span>Conteo de Inventario</span>
                     </a>
                 </div>
+                <div class="sidebar-section nav-admin-only" id="nav-compras">
+                    <div class="sidebar-section-title">Compras</div>
+                    <a class="nav-item" data-page="compras">
+                        <i class="fas fa-cart-flatbed"></i>
+                        <span>Compras</span>
+                    </a>
+                    <a class="nav-item" data-page="cuentas-pagar">
+                        <i class="fas fa-file-invoice-dollar"></i>
+                        <span>Cuentas por Pagar</span>
+                    </a>
+                </div>
                 <div class="sidebar-section nav-admin-only" id="nav-despacho">
                     <div class="sidebar-section-title">Despacho</div>
                     <a class="nav-item" data-page="despacho">
@@ -212,12 +223,13 @@
     <div id="toast-container"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-    <script src="js/app.js?v=61"></script>
+    <script src="js/app.js?v=62"></script>
     <script src="js/facturacion.js?v=15"></script>
     <script src="js/pagos.js?v=2"></script>
     <script src="js/cierre.js?v=2"></script>
     <script src="js/inventario.js?v=1"></script>
-    <script src="js/catalogos.js?v=3"></script>
+    <script src="js/catalogos.js?v=4"></script>
+    <script src="js/compras.js?v=1"></script>
     <script src="js/conteo.js?v=2"></script>
     <script src="js/offline.js?v=2"></script>
 </body>
