@@ -604,12 +604,13 @@ async function renderPedidos() {
                 <td>${p.ruta ? `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:12px;background:${p.ruta.color}22;color:${p.ruta.color};font-weight:600;font-size:11px"><i class="fas fa-route"></i>${p.ruta.nombre}</span>` : '<span style="color:var(--text-muted);font-size:12px">-</span>'}</td>
                 <td>${p.vendedor?.nombre || 'N/A'}</td>
                 <td>${formatDate(p.fecha_pedido)}</td>
-                <td><span class="badge-status badge-${p.estado}">${p.estado}</span> ${crPedidoChip(p)} ${fePedidoChip(p.factura)}</td>
+                <td><span class="badge-status badge-${p.estado}">${p.estado}</span> ${crPedidoChip(p)} ${fePedidoChip(p.factura)}${canceladoPorHTML(p)}</td>
                 <td><strong>$${formatNumber(p.total)}</strong></td>
-                <td>
+                <td style="white-space:nowrap">
                     <button class="btn btn-ghost btn-sm" onclick="viewPedido(${p.id_pedido})" title="Ver detalle">
                         <i class="fas fa-eye"></i>
                     </button>
+                    ${puedeEliminarPedido(p) ? `<button class="btn btn-ghost btn-sm" onclick="eliminarPedido(${p.id_pedido}, '${p.numero_pedido}', () => window._pedidosQuitar(${p.id_pedido}))" title="Eliminar pedido"><i class="fas fa-trash-alt" style="color:var(--danger)"></i></button>` : ''}
                 </td>
             </tr>
         `).join('');
@@ -686,6 +687,11 @@ async function renderPedidos() {
         );
         renderPedidosTable(filtered);
     }, 300));
+
+    window._pedidosQuitar = (id) => {
+        allPedidos = allPedidos.filter(p => p.id_pedido !== id);
+        document.getElementById('search-pedidos').dispatchEvent(new Event('input'));
+    };
 
     document.getElementById('filter-estado').addEventListener('change', () => {
         updateFilterSummary();
@@ -769,6 +775,8 @@ async function viewPedido(id, skipHash = false) {
 
     const p = data.pedido;
     const facturado = p.factura?.estado === 'autorizada';
+    const cancelacion = [...(p.historial || [])].reverse().find(h => h.estado_nuevo === 'cancelado');
+    if (p.estado === 'cancelado' && cancelacion) { p.cancelado_por = cancelacion.usuario?.nombre; p.cancelado_at = cancelacion.fecha; }
     state.currentPage = 'detalle-pedido';
     if (!skipHash) {
         const newHash = '#/pedidos/' + id;
@@ -784,6 +792,7 @@ async function viewPedido(id, skipHash = false) {
             ${facturado
                 ? `<span class="fe-chip ok" style="align-self:center;padding:7px 12px"><i class="fas fa-lock"></i> Facturado ${p.factura.prefijo || ''}${p.factura.numero || ''}</span>`
                 : `<button class="btn btn-outline btn-sm" onclick="window._editarPedido(${p.id_pedido})"><i class="fas fa-edit"></i> Editar Pedido</button>`}
+            ${puedeEliminarPedido(p) ? `<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#FECACA" onclick="eliminarPedido(${p.id_pedido}, '${p.numero_pedido}', () => navigateTo('pedidos'))"><i class="fas fa-trash-alt"></i> Eliminar</button>` : ''}
             <div style="position:relative;display:inline-block" id="print-dropdown">
                 <button class="btn btn-outline btn-sm" onclick="document.getElementById('print-menu').classList.toggle('show')"><i class="fas fa-print"></i> Imprimir <i class="fas fa-caret-down" style="margin-left:4px"></i></button>
                 <div id="print-menu" class="dropdown-menu">
@@ -792,6 +801,7 @@ async function viewPedido(id, skipHash = false) {
                 </div>
             </div>
         </div>
+        ${p.estado === 'cancelado' ? `<div class="pedido-cancelado-aviso fade-in"><i class="fas fa-ban"></i><span>Pedido cancelado${p.cancelado_por ? ` por <b>${escHTML(p.cancelado_por)}</b>` : ''}${p.cancelado_at ? ` el ${formatDate(p.cancelado_at)}` : ''}${cancelacion?.comentario && cancelacion.comentario !== 'Cambio de estado' ? ` · “${escHTML(cancelacion.comentario)}”` : ''}</span></div>` : ''}
         <div class="detail-grid fade-in">
             <div>
                 <div class="card" style="margin-bottom:20px">
@@ -849,6 +859,7 @@ async function viewPedido(id, skipHash = false) {
                         <div class="info-row"><label>Teléfono</label><span>${p.cliente?.telefono || '-'}</span></div>
                         <div class="info-row"><label>Dirección</label><span>${p.cliente?.direccion || '-'}</span></div>
                         <div class="info-row"><label>Vendedor</label><span>${p.vendedor?.nombre || 'N/A'}</span></div>
+                        ${p.estado === 'cancelado' && p.cancelado_por ? `<div class="info-row"><label>Cancelado por</label><span style="color:var(--danger);font-weight:600">${escHTML(p.cancelado_por)}</span></div>` : ''}
                         ${p.ruta ? `<div class="info-row"><label>Ruta</label><span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:14px;background:${p.ruta.color}22;color:${p.ruta.color};font-weight:600;font-size:12px"><i class="fas fa-route"></i>${p.ruta.nombre}</span></div>` : ''}
                         <div class="info-row"><label>Fecha</label><span>${formatDate(p.fecha_pedido)}</span></div>
                         ${p.fecha_entrega ? `<div class="info-row"><label>Entrega</label><span>${p.fecha_entrega}</span></div>` : ''}
@@ -886,6 +897,28 @@ async function viewPedido(id, skipHash = false) {
             </div>
         </div>
     `;
+}
+
+/** Solo pedidos pendientes, sin factura electrónica ni pagos; admin o el vendedor dueño */
+function puedeEliminarPedido(p) {
+    if (p.estado !== 'pendiente' || p.factura || parseFloat(p.pagado) > 0 || !Number.isInteger(p.id_pedido)) return false;
+    return state.usuario?.rol === 'admin' || p.id_vendedor === state.usuario?.id_usuario;
+}
+
+function canceladoPorHTML(p) {
+    if (p.estado !== 'cancelado' || !p.cancelado_por) return '';
+    return `<div class="cancelado-por" title="${p.cancelado_at ? 'Cancelado el ' + formatDate(p.cancelado_at) : ''}"><i class="fas fa-user-xmark"></i> por ${escHTML(p.cancelado_por)}</div>`;
+}
+
+async function eliminarPedido(id, numero, alTerminar) {
+    if (!(await confirmar('El pedido se borra por completo y el stock de sus productos vuelve al inventario. Esta acción no se puede deshacer.', { titulo: `¿Eliminar el pedido ${numero}?`, ok: 'Eliminar pedido', tipo: 'danger' }))) return;
+    const data = await api(`/pedidos/${id}`, { method: 'DELETE' });
+    if (data && !data.error) {
+        toast(data.mensaje || 'Pedido eliminado');
+        if (alTerminar) alTerminar();
+    } else {
+        toast(data?.mensaje || 'No se pudo eliminar el pedido', 'error', 6000);
+    }
 }
 
 async function cambiarEstadoPedido(id) {
@@ -3255,13 +3288,17 @@ async function renderCategorias() {
         <div class="card">
             <div class="table-wrapper">
                 <table class="data-table">
-                    <thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th></tr></thead>
+                    <thead><tr><th>ID</th><th>Nombre</th><th>Descripción</th><th style="text-align:right">Productos</th><th>Acciones</th></tr></thead>
                     <tbody>
                         ${(data.categorias || []).map(c => `
                             <tr>
                                 <td>${c.id_categoria}</td>
                                 <td><strong>${c.nombre}</strong></td>
                                 <td>${c.descripcion || '-'}</td>
+                                <td style="text-align:right">${c.productos_count || 0}</td>
+                                <td>${c.productos_count > 0
+                                    ? `<button class="btn btn-ghost btn-sm" disabled title="Tiene ${c.productos_count} producto(s): muévelos a otra categoría para poder eliminarla"><i class="fas fa-trash-alt"></i></button>`
+                                    : `<button class="btn btn-ghost btn-sm" onclick="eliminarCategoria(${c.id_categoria})" title="Eliminar categoría"><i class="fas fa-trash-alt" style="color:var(--danger)"></i></button>`}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -3381,6 +3418,15 @@ async function renderPerfil() {
             toast(resp?.mensaje || 'Error al cambiar contraseña', 'error');
         }
     };
+}
+
+async function eliminarCategoria(id) {
+    const fila = [...document.querySelectorAll('.data-table tbody tr')].find(tr => tr.cells[0]?.textContent.trim() === String(id));
+    const nombre = fila?.cells[1]?.textContent.trim() || '';
+    if (!(await confirmar('La categoría no tiene productos, así que no se afecta nada más.', { titulo: `¿Eliminar la categoría "${nombre}"?`, ok: 'Eliminar', tipo: 'danger' }))) return;
+    const data = await api(`/categorias/${id}`, { method: 'DELETE' });
+    if (data && !data.error) { toast('Categoría eliminada'); renderCategorias(); }
+    else toast(data?.mensaje || 'No se pudo eliminar', 'error', 6000);
 }
 
 function openCategoriaModal() {

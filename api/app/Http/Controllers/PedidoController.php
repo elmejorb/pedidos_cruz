@@ -125,6 +125,23 @@ class PedidoController extends Controller
 
         $pedidos = $query->orderBy('created_at', 'desc')->get();
 
+        // Quién canceló cada pedido cancelado (último cambio a "cancelado" en el historial)
+        $cancelados = $pedidos->where('estado', 'cancelado')->pluck('id_pedido');
+        if ($cancelados->isNotEmpty()) {
+            $quien = DB::table('pc_pedido_historial as h')
+                ->leftJoin('pc_usuarios as u', 'u.id_usuario', '=', 'h.id_usuario')
+                ->whereIn('h.id_pedido', $cancelados)->where('h.estado_nuevo', 'cancelado')
+                ->orderBy('h.id_historial')
+                ->select('h.id_pedido', 'u.nombre', 'h.fecha')
+                ->get()->keyBy('id_pedido'); // la última clave gana: la cancelación más reciente
+            $pedidos->each(function ($p) use ($quien) {
+                if (isset($quien[$p->id_pedido])) {
+                    $p->setAttribute('cancelado_por', $quien[$p->id_pedido]->nombre);
+                    $p->setAttribute('cancelado_at', $quien[$p->id_pedido]->fecha);
+                }
+            });
+        }
+
         if ($this->feHabilitada() && $pedidos->isNotEmpty()) {
             $facturas = DB::table('pc_facturas')
                 ->whereIn('id_pedido', $pedidos->pluck('id_pedido'))
@@ -473,29 +490,39 @@ class PedidoController extends Controller
         }
     }
 
-    public function destroy($id)
+    /** Elimina un pedido PENDIENTE (admin o el vendedor dueño). Los demás estados se manejan con Cancelar. */
+    public function destroy(Request $request, $id)
     {
         $pedido = Pedido::find($id);
         if (!$pedido) {
             return response()->json(['error' => true, 'mensaje' => 'Pedido no encontrado'], 404);
         }
 
+        $usuario = $request->usuario;
+        if ($usuario->rol !== 'admin' && (int) $pedido->id_vendedor !== (int) $usuario->id_usuario) {
+            return response()->json(['error' => true, 'mensaje' => 'Solo puedes eliminar tus propios pedidos'], 403);
+        }
+        if ($pedido->estado !== 'pendiente') {
+            return response()->json(['error' => true, 'mensaje' => 'Solo se pueden eliminar pedidos pendientes. Este pedido está ' . $pedido->estado . '; usa Cancelar.'], 409);
+        }
         if ($b = $this->bloqueoPorFactura($id)) return $b;
         if ($b = $this->bloqueoPorPagos($id, 'eliminar el pedido')) return $b;
-
-        // Restore stock (equivalent units)
-        $detalles = PedidoDetalle::where('id_pedido', $id)->get();
-        foreach ($detalles as $detalle) {
-            $producto = Producto::find($detalle->id_producto);
-            if ($producto) {
-                $producto->stock += ($detalle->unidades_equivalentes ?? $detalle->cantidad);
-                $producto->save();
-            }
+        if ($this->feHabilitada() && DB::table('pc_facturas')->where('id_pedido', $id)->exists()) {
+            return response()->json(['error' => true, 'mensaje' => 'El pedido tiene intentos de facturación electrónica. Elimínalos primero desde Facturación.'], 409);
         }
 
-        $pedido->delete();
+        DB::transaction(function () use ($pedido, $id) {
+            // Pendiente = el stock está descontado: se devuelve una sola vez (unidades equivalentes)
+            foreach (PedidoDetalle::where('id_pedido', $id)->get() as $detalle) {
+                Producto::where('id_producto', $detalle->id_producto)
+                    ->increment('stock', $detalle->unidades_equivalentes ?? $detalle->cantidad);
+            }
+            if ($this->creditosHabilitados()) DB::table('pc_pagos')->where('id_pedido', $id)->delete(); // solo quedan anulados
+            PedidoHistorial::where('id_pedido', $id)->delete();
+            $pedido->delete(); // el detalle se borra en cascada
+        });
 
-        return response()->json(['error' => false, 'mensaje' => 'Pedido eliminado']);
+        return response()->json(['error' => false, 'mensaje' => "Pedido {$pedido->numero_pedido} eliminado"]);
     }
 
     public function despachoConsolidado(Request $request)

@@ -44,6 +44,7 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     // Categorías
     $router->get('/categorias', 'ProductoController@categorias');
     $router->post('/categorias', 'ProductoController@storeCategoria');
+    $router->delete('/categorias/{id}', 'ProductoController@destroyCategoria');
 
     // Clientes
     $router->get('/clientes', 'ClienteController@index');

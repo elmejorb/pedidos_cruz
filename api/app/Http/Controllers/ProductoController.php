@@ -206,7 +206,8 @@ class ProductoController extends Controller
 
     public function categorias()
     {
-        $categorias = Categoria::where('activo', 1)->orderBy('nombre')->get();
+        $categorias = Categoria::where('activo', 1)->orderBy('nombre')
+            ->withCount(['productos' => fn($q) => $q->where('activo', 1)])->get();
         return response()->json(['error' => false, 'categorias' => $categorias]);
     }
 
@@ -224,5 +225,24 @@ class ProductoController extends Controller
         ]);
 
         return response()->json(['error' => false, 'mensaje' => 'Categoría creada', 'categoria' => $categoria], 201);
+    }
+
+    /** Elimina (desactiva) una categoría solo si no tiene productos activos */
+    public function destroyCategoria(Request $request, $id)
+    {
+        if ($request->usuario->rol !== 'admin') {
+            return response()->json(['error' => true, 'mensaje' => 'No tienes permisos para eliminar categorías'], 403);
+        }
+        $categoria = Categoria::where('activo', 1)->find($id);
+        if (!$categoria) {
+            return response()->json(['error' => true, 'mensaje' => 'Categoría no encontrada'], 404);
+        }
+        $n = Producto::where('id_categoria', $id)->where('activo', 1)->count();
+        if ($n > 0) {
+            return response()->json(['error' => true, 'mensaje' => "La categoría tiene {$n} producto(s). Muévelos a otra categoría antes de eliminarla."], 409);
+        }
+        $categoria->activo = 0;
+        $categoria->save();
+        return response()->json(['error' => false, 'mensaje' => 'Categoría eliminada']);
     }
 }
