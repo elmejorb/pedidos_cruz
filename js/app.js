@@ -2551,6 +2551,24 @@ async function renderReportesGeneral(container = document.getElementById('page-c
                 </div>
             </div>
         </div>
+        ${r.top_proveedores ? `
+        <div class="card fade-in" style="margin-top:20px">
+            <div class="card-header"><h3><i class="fas fa-truck-field" style="color:#8B5CF6;margin-right:8px"></i>Top Proveedores</h3><span style="font-size:12px;color:var(--text-muted)">Ventas por el proveedor de cada producto</span></div>
+            <div class="card-body" style="padding:0">
+                ${!r.top_proveedores.length ? '<div class="empty-state" style="padding:30px"><p>Sin datos aún</p></div>' : (() => {
+                    const max = Math.max(...r.top_proveedores.map(x => parseFloat(x.total)));
+                    return r.top_proveedores.map((p, i) => `
+                    <div class="top-prov-row">
+                        <div class="top-prov-n">${i + 1}</div>
+                        <div class="top-prov-info">
+                            <div class="top-prov-head"><span>${escHTML(p.nombre)}</span><b>$${formatNumber(p.total)}</b></div>
+                            <div class="top-prov-bar"><div style="width:${max > 0 ? Math.max(2, parseFloat(p.total) / max * 100) : 0}%"></div></div>
+                            <small>${p.productos} producto${p.productos == 1 ? '' : 's'} · ${formatNumber(p.unidades)} uds</small>
+                        </div>
+                    </div>`).join('');
+                })()}
+            </div>
+        </div>` : ''}
     `;
 
     // Chart ventas mensuales - llenar últimos 12 meses con ceros

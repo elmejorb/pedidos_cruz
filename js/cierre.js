@@ -136,13 +136,18 @@ async function renderCierreMes(root) {
             return [...m.values()].sort((a, b) => b.total - a.total);
         };
 
-        // Productos de los pedidos incluidos
+        // Productos y proveedores de los pedidos incluidos
         const prods = new Map();
+        const provs = new Map();
         (st.data?.lineas || []).forEach(l => {
             if (!ids.has(l.id_pedido)) return;
             const g = prods.get(l.id_producto) || { nombre: l.nombre || 'Producto', codigo: l.codigo, unidades: 0, total: 0 };
             g.unidades += parseFloat(l.unidades || 0); g.total += parseFloat(l.subtotal || 0);
             prods.set(l.id_producto, g);
+            const kp = l.id_proveedor || 0;
+            const pv = provs.get(kp) || { nombre: l.proveedor || 'Sin proveedor asignado', unidades: 0, total: 0, productos: new Set() };
+            pv.unidades += parseFloat(l.unidades || 0); pv.total += parseFloat(l.subtotal || 0); pv.productos.add(l.id_producto);
+            provs.set(kp, pv);
         });
 
         // Ventas por día
@@ -167,6 +172,7 @@ async function renderCierreMes(root) {
             porRuta: agrupar(p => p.id_ruta || 0, p => p.ruta || 'Sin ruta'),
             porEstado: CM_ESTADOS.map(([v, l, c]) => ({ v, l, c, n: vis.filter(p => p.estado === v && !st.excluidos.has(p.id_pedido)).length, total: sum(vis.filter(p => p.estado === v && !st.excluidos.has(p.id_pedido)), 'total') })),
             productos: [...prods.values()].sort((a, b) => b.total - a.total),
+            proveedores: [...provs.values()].map(x => ({ ...x, nProductos: x.productos.size })).sort((a, b) => b.total - a.total),
             porDia, dias,
             facturados: inc.filter(p => p.factura).length,
             cancelados: (st.data?.pedidos || []).filter(p => p.estado === 'cancelado'),
@@ -233,10 +239,13 @@ async function renderCierreMes(root) {
                 </div>
             </div>
 
-            <div class="cm-grid-3 fade-in">
+            <div class="cm-grid-half fade-in">
                 ${cmRanking('Por vendedor', 'fa-user-tie', 'var(--info)', c.porVendedor, c.total, x => `${x.pedidos} ped.`)}
                 ${cmRanking('Por ruta', 'fa-route', 'var(--success)', c.porRuta, c.total, x => `${x.pedidos} ped.`)}
+            </div>
+            <div class="cm-grid-half fade-in">
                 ${cmRanking('Top productos', 'fa-trophy', 'var(--warning)', c.productos.slice(0, 10), c.total, x => `${formatNumber(x.unidades)} uds`)}
+                ${cmRanking('Top proveedores', 'fa-truck-field', '#8B5CF6', c.proveedores.slice(0, 10), c.total, x => `${x.nProductos} prod. · ${formatNumber(x.unidades)} uds`)}
             </div>
 
             <div class="card fade-in">
@@ -386,6 +395,7 @@ async function renderCierreMes(root) {
                 <div>${tabla('Por ruta', c.porRuta, 'Pedidos')}</div>
             </div>
             ${tabla('Top 15 productos', c.productos.slice(0, 15), 'Unidades')}
+            ${tabla('Top proveedores', c.proveedores.slice(0, 15), 'Unidades')}
             <h3 style="margin:18px 0 6px;font-size:13px;page-break-before:always">Listado de pedidos (${c.n})</h3>
             <table><thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Vendedor</th>${credito ? '<th>Pago</th>' : ''}<th>Estado</th><th style="text-align:right">Total</th></tr></thead>
             <tbody>${c.inc.map(p => `<tr><td>${cmEsc(p.numero_pedido)}</td><td>${formatDateShort(p.fecha_pedido)}</td><td>${cmEsc(p.cliente_razon || p.cliente_nombre)}</td><td>${cmEsc(p.vendedor || '')}</td>${credito ? `<td>${p.forma_pago === 'credito' ? 'Crédito' : 'Contado'}</td>` : ''}<td>${p.estado}</td><td style="text-align:right">${cmMoney(p.total)}</td></tr>`).join('')}</tbody>

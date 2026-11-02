@@ -624,6 +624,27 @@ class PedidoController extends Controller
             ->limit(10)
             ->get();
 
+        // Top proveedores (según el proveedor actual de cada producto)
+        $topProveedores = [];
+        if (Schema::hasTable('pc_proveedores')) {
+            $topProveedores = DB::table('pc_pedido_detalle as d')
+                ->join('pc_pedidos as p', 'p.id_pedido', '=', 'd.id_pedido')
+                ->join('pc_productos as pr', 'pr.id_producto', '=', 'd.id_producto')
+                ->leftJoin('pc_proveedores as pv', 'pv.id_proveedor', '=', 'pr.id_proveedor')
+                ->where('p.tipo', 'pedido')
+                ->where('p.estado', '!=', 'cancelado')
+                ->groupBy('pr.id_proveedor', 'pv.nombre')
+                ->select(
+                    DB::raw("COALESCE(pv.nombre, 'Sin proveedor asignado') as nombre"),
+                    DB::raw('COUNT(DISTINCT d.id_producto) as productos'),
+                    DB::raw('SUM(COALESCE(d.unidades_equivalentes, d.cantidad)) as unidades'),
+                    DB::raw('SUM(d.subtotal) as total')
+                )
+                ->orderByDesc('total')
+                ->limit(10)
+                ->get();
+        }
+
         // Top clientes
         $topClientes = Pedido::ventas()->join('pc_clientes', 'pc_pedidos.id_cliente', '=', 'pc_clientes.id_cliente')
             ->where('pc_pedidos.estado', '!=', 'cancelado')
@@ -650,6 +671,7 @@ class PedidoController extends Controller
                 'ventas_mensuales' => $ventasMensuales,
                 'top_productos' => $topProductos,
                 'top_clientes' => $topClientes,
+                'top_proveedores' => $topProveedores,
                 'por_estado' => $porEstado,
             ]
         ]);

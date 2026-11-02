@@ -119,13 +119,18 @@ class ReporteController extends Controller
         $pedidos = $q->orderBy('p.fecha_pedido')->get();
 
         // ---------- Productos vendidos (por pedido, para recalcular según selección) ----------
-        $lineas = DB::table('pc_pedido_detalle as d')
+        $qLineas = DB::table('pc_pedido_detalle as d')
             ->join('pc_pedidos as p', 'p.id_pedido', '=', 'd.id_pedido')
             ->leftJoin('pc_productos as pr', 'pr.id_producto', '=', 'd.id_producto')
             ->whereBetween('p.fecha_pedido', [$desde, $hasta])
             ->select('d.id_pedido', 'd.id_producto', 'pr.nombre', 'pr.codigo',
-                DB::raw('COALESCE(d.unidades_equivalentes, d.cantidad) as unidades'), 'd.subtotal')
-            ->get();
+                DB::raw('COALESCE(d.unidades_equivalentes, d.cantidad) as unidades'), 'd.subtotal');
+        // Proveedor actual de cada producto (para el top por proveedor)
+        if (Schema::hasTable('pc_proveedores')) {
+            $qLineas->leftJoin('pc_proveedores as pv', 'pv.id_proveedor', '=', 'pr.id_proveedor')
+                ->addSelect('pr.id_proveedor', 'pv.nombre as proveedor');
+        }
+        $lineas = $qLineas->get();
 
         // ---------- Pagos/abonos recibidos en el mes (de cualquier pedido) ----------
         $pagosMes = [];
