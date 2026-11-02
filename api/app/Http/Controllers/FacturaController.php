@@ -120,6 +120,7 @@ class FacturaController extends Controller
         if ($r = $this->soloAdmin($request)) return $r;
         $pedido = Pedido::find($id);
         if (!$pedido) return response()->json(['error' => true, 'mensaje' => 'Pedido no encontrado'], 404);
+        if ($pedido->tipo === 'saldo_anterior') return response()->json(['error' => true, 'mensaje' => 'Un saldo anterior no se factura electrónicamente'], 409);
 
         $svc = new FacturacionElectronicaService();
         $prep = $svc->preparar($pedido, $this->opciones($request));
@@ -132,6 +133,7 @@ class FacturaController extends Controller
         if ($r = $this->soloAdmin($request)) return $r;
         $pedido = Pedido::find($id);
         if (!$pedido) return response()->json(['error' => true, 'mensaje' => 'Pedido no encontrado'], 404);
+        if ($pedido->tipo === 'saldo_anterior') return response()->json(['error' => true, 'mensaje' => 'Un saldo anterior no se factura electrónicamente'], 409);
 
         $svc = new FacturacionElectronicaService();
         $res = $svc->facturar($pedido, $this->opciones($request), $request->usuario->id_usuario);

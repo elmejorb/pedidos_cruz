@@ -17,12 +17,12 @@ class DashboardController extends Controller
         $esAdmin = $usuario->rol === 'admin';
         $filtroVendedor = $esAdmin ? [] : ['id_vendedor' => $usuario->id_usuario];
 
-        $totalPedidos = Pedido::where($filtroVendedor)->count();
+        $totalPedidos = Pedido::ventas()->where($filtroVendedor)->count();
         $totalClientes = Cliente::where('activo', 1)->where($filtroVendedor ?: [])->count();
         $totalProductos = Producto::where('activo', 1)->count();
-        $pedidosPendientes = Pedido::where('estado', 'pendiente')->where($filtroVendedor)->count();
+        $pedidosPendientes = Pedido::ventas()->where('estado', 'pendiente')->where($filtroVendedor)->count();
 
-        $ventasMes = Pedido::where('estado', '!=', 'cancelado')
+        $ventasMes = Pedido::ventas()->where('estado', '!=', 'cancelado')
             ->where($filtroVendedor)
             ->whereMonth('fecha_pedido', Carbon::now()->month)
             ->whereYear('fecha_pedido', Carbon::now()->year)
@@ -32,14 +32,14 @@ class DashboardController extends Controller
             ->whereColumn('stock', '<=', 'stock_minimo')
             ->count();
 
-        $ultimosPedidos = Pedido::with(['cliente:id_cliente,nombre,razon_social', 'vendedor:id_usuario,nombre'])
+        $ultimosPedidos = Pedido::ventas()->with(['cliente:id_cliente,nombre,razon_social', 'vendedor:id_usuario,nombre'])
             ->where($filtroVendedor)
             ->orderBy('created_at', 'desc')
             ->limit(5)
             ->get();
 
         // Ventas últimos 7 días
-        $ventasSemana = Pedido::where('estado', '!=', 'cancelado')
+        $ventasSemana = Pedido::ventas()->where('estado', '!=', 'cancelado')
             ->where($filtroVendedor)
             ->where('fecha_pedido', '>=', Carbon::now()->subDays(7))
             ->select(

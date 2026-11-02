@@ -82,6 +82,7 @@ class ReporteController extends Controller
             ->leftJoin('pc_clientes as c', 'c.id_cliente', '=', 'p.id_cliente')
             ->leftJoin('pc_usuarios as u', 'u.id_usuario', '=', 'p.id_vendedor')
             ->leftJoin('pc_rutas as r', 'r.id_ruta', '=', 'p.id_ruta')
+            ->where('p.tipo', 'pedido')
             ->whereBetween('p.fecha_pedido', [$desde, $hasta])
             ->select(
                 'p.id_pedido', 'p.numero_pedido', 'p.fecha_pedido', 'p.estado', 'p.subtotal', 'p.descuento', 'p.total',
@@ -141,6 +142,7 @@ class ReporteController extends Controller
         // ---------- Comparativo: mes anterior y mismo mes del año anterior ----------
         $resumenMes = function (Carbon $ini) {
             $r = DB::table('pc_pedidos')
+                ->where('tipo', 'pedido')
                 ->where('estado', '!=', 'cancelado')
                 ->whereBetween('fecha_pedido', [$ini->copy()->startOfMonth(), $ini->copy()->endOfMonth()])
                 ->selectRaw('COUNT(*) as pedidos, COALESCE(SUM(total), 0) as ventas')->first();

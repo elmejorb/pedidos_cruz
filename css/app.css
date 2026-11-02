@@ -2484,3 +2484,40 @@ tr.com-sel { background: #F5F3FF; }
 .cancelado-por i { font-size: 10px; margin-right: 2px; }
 .pedido-cancelado-aviso { display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin-bottom: 16px; border-radius: 12px; background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B; font-size: 14px; }
 .pedido-cancelado-aviso i { font-size: 16px; }
+
+/* ===== Saldos anteriores ===== */
+.cr-tag-saldo { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; background: #EDE9FE; color: #5B21B6; font-size: 10.5px; font-weight: 700; white-space: nowrap; vertical-align: middle; }
+.cr-tag-saldo i { font-size: 9.5px; }
+.cr-hint { display: flex; gap: 8px; align-items: flex-start; padding: 10px 14px; margin-bottom: 14px; border-radius: 10px; background: #F5F3FF; border: 1px solid #DDD6FE; color: #4C1D95; font-size: 13px; }
+.cr-hint i { margin-top: 2px; }
+.sa-cli-res { position: absolute; left: 0; right: 0; z-index: 20; background: var(--surface, #fff); border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.14); max-height: 280px; overflow: auto; }
+.sa-cli-op { padding: 9px 14px; cursor: pointer; display: flex; flex-direction: column; border-bottom: 1px solid var(--border-light, #eee); font-size: 13.5px; }
+.sa-cli-op:hover { background: var(--primary-50, #EEF2FF); }
+.sa-cli-op small, .sa-cli-sel small { color: var(--text-muted); font-size: 12px; }
+.sa-cli-op.vacio { color: var(--text-muted); cursor: default; }
+.sa-cli-sel { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 10px; background: var(--primary-50, #EEF2FF); border: 1.5px solid var(--primary); }
+.sa-cli-sel div { display: flex; flex-direction: column; min-width: 0; }
+.sa-docs { border: 1px solid var(--border); border-radius: 12px; padding: 6px 10px; }
+.sa-doc { display: grid; grid-template-columns: 1fr 150px 130px 140px 1.3fr 34px; gap: 8px; align-items: center; padding: 6px 0; }
+.sa-doc + .sa-doc { border-top: 1px dashed var(--border); }
+.sa-doc-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+.sa-doc input { width: 100%; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 9px; font: inherit; font-size: 13.5px; background: var(--surface, #fff); color: var(--text); }
+.sa-doc input:focus { outline: none; border-color: var(--primary); }
+.sa-doc input[data-k=valor], .sa-doc input[data-k=saldo] { text-align: right; font-weight: 600; }
+.sa-m { display: none; }
+.sa-total { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding: 12px 16px; border-radius: 12px; background: linear-gradient(135deg, var(--primary), #8B5CF6); color: #fff; }
+.sa-total strong { font-size: 20px; }
+@media (max-width: 760px) {
+    .sa-doc-head { display: none; }
+    .sa-doc { grid-template-columns: 1fr; row-gap: 4px; padding: 10px 0; }
+    .sa-m { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: -2px; }
+    .sa-doc button[data-del] { justify-self: end; }
+}
+
+/* ===== Menú: secciones plegables ===== */
+.sidebar-section-title[data-sec] { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; border-radius: 8px; margin-top: 6px; }
+.sidebar-section-title[data-sec]:hover { color: var(--text-secondary); background: var(--bg); }
+.sidebar-section-title i { font-size: 9px; opacity: .6; transition: transform .2s; }
+.sidebar-section.collapsed .sidebar-section-title i { transform: rotate(-90deg); }
+.sidebar-section.collapsed .nav-item { display: none; }
+.sidebar-section[data-sec="principal"] { margin-bottom: 2px; }

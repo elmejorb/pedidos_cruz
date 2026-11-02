@@ -86,6 +86,40 @@ function toast(msg, type = 'success', duration = 3500) {
 // ========================================
 // MODAL
 // ========================================
+// ========================================
+// MENÚ: secciones plegables (se recuerda cuáles cerró el usuario)
+// ========================================
+function menuCerradas() {
+    try { return JSON.parse(localStorage.getItem('pc_menu_cerradas') || '[]'); } catch (e) { return []; }
+}
+
+function menuGuardar(lista) {
+    try { localStorage.setItem('pc_menu_cerradas', JSON.stringify(lista)); } catch (e) { /* sin almacenamiento */ }
+}
+
+function menuInit() {
+    const cerradas = menuCerradas();
+    document.querySelectorAll('.sidebar-section[data-sec]').forEach(sec => sec.classList.toggle('collapsed', cerradas.includes(sec.dataset.sec)));
+    document.querySelectorAll('.sidebar-section-title[data-sec]').forEach(t => t.onclick = () => {
+        const sec = t.closest('.sidebar-section');
+        const cerrar = !sec.classList.contains('collapsed');
+        sec.classList.toggle('collapsed', cerrar);
+        const l = menuCerradas().filter(x => x !== sec.dataset.sec);
+        if (cerrar) l.push(sec.dataset.sec);
+        menuGuardar(l);
+    });
+}
+
+/** La sección de la página actual siempre queda abierta */
+function menuAbrirSeccion(page) {
+    const item = document.querySelector(`.nav-item[data-page="${page}"]`);
+    const sec = item?.closest('.sidebar-section.collapsed');
+    if (sec) {
+        sec.classList.remove('collapsed');
+        menuGuardar(menuCerradas().filter(x => x !== sec.dataset.sec));
+    }
+}
+
 function openModal(title, bodyHTML, footerHTML = '') {
     document.getElementById('modal-title').textContent = title;
     document.getElementById('modal-body').innerHTML = bodyHTML;
@@ -318,6 +352,7 @@ function navigateTo(page, options = {}) {
     }
 
     // Update nav
+    menuAbrirSeccion(page);
     document.querySelectorAll('.nav-item').forEach(item => {
         item.classList.toggle('active', item.dataset.page === page);
     });
@@ -345,7 +380,7 @@ function navigateTo(page, options = {}) {
         'rutas': 'Rutas',
         'despacho': 'Generar Despacho',
         'facturas': 'Facturas Electrónicas',
-        'cartera': 'Cartera y Pagos',
+        'cartera': 'Cartera Clientes',
         'catalogos': 'Catálogos',
         'conteo': 'Conteo de Inventario',
         'compras': 'Compras',
@@ -774,6 +809,12 @@ async function viewPedido(id, skipHash = false) {
     if (!data || data.error) return;
 
     const p = data.pedido;
+    if (p.tipo === 'saldo_anterior') {
+        state.currentPage = 'detalle-pedido';
+        if (!skipHash && location.hash !== '#/pedidos/' + id) history.pushState(null, '', '#/pedidos/' + id);
+        crVistaSaldo(p);
+        return;
+    }
     const facturado = p.factura?.estado === 'autorizada';
     const cancelacion = [...(p.historial || [])].reverse().find(h => h.estado_nuevo === 'cancelado');
     if (p.estado === 'cancelado' && cancelacion) { p.cancelado_por = cancelacion.usuario?.nombre; p.cancelado_at = cancelacion.fecha; }
@@ -3678,10 +3719,10 @@ function initApp() {
 
     // Admin sections visibility
     const isAdmin = u.rol === 'admin';
-    document.getElementById('nav-admin').style.display = isAdmin ? '' : 'none';
     document.querySelectorAll('.nav-admin-only').forEach(el => {
         el.style.display = isAdmin ? '' : 'none';
     });
+    menuInit();
 
     cargarEmpresa();
 

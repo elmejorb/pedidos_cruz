@@ -82,7 +82,7 @@ class PedidoController extends Controller
 
     public function index(Request $request)
     {
-        $query = Pedido::with([
+        $query = Pedido::ventas()->with([
             'cliente:id_cliente,nombre,razon_social,telefono',
             'vendedor:id_usuario,nombre',
             'ruta'
@@ -232,7 +232,7 @@ class PedidoController extends Controller
 
             // Generate order number
             $year = date('Y');
-            $lastPedido = Pedido::whereYear('created_at', $year)->orderBy('id_pedido', 'desc')->first();
+            $lastPedido = Pedido::ventas()->whereYear('created_at', $year)->where('numero_pedido', 'LIKE', 'PED-%')->orderBy('id_pedido', 'desc')->first();
             $nextNum = $lastPedido ? ((int) substr($lastPedido->numero_pedido, -5)) + 1 : 1;
             $numeroPedido = 'PED-' . $year . '-' . str_pad($nextNum, 5, '0', STR_PAD_LEFT);
 
@@ -341,6 +341,9 @@ class PedidoController extends Controller
             return response()->json(['error' => true, 'mensaje' => 'Pedido no encontrado'], 404);
         }
 
+        if ($pedido->tipo === 'saldo_anterior') {
+            return response()->json(['error' => true, 'mensaje' => 'Es un saldo anterior: se edita desde Cartera y Pagos'], 409);
+        }
         if ($request->estado === 'cancelado' && ($b = $this->bloqueoPorFactura($id))) return $b;
         if ($request->estado === 'cancelado' && $pedido->estado !== 'cancelado' && ($b = $this->bloqueoPorPagos($id, 'cancelar el pedido'))) return $b;
 
@@ -388,6 +391,9 @@ class PedidoController extends Controller
         $pedido = Pedido::find($id);
         if (!$pedido) {
             return response()->json(['error' => true, 'mensaje' => 'Pedido no encontrado'], 404);
+        }
+        if ($pedido->tipo === 'saldo_anterior') {
+            return response()->json(['error' => true, 'mensaje' => 'Es un saldo anterior: se edita desde Cartera y Pagos'], 409);
         }
 
         if ($b = $this->bloqueoPorFactura($id)) return $b;
@@ -498,6 +504,9 @@ class PedidoController extends Controller
             return response()->json(['error' => true, 'mensaje' => 'Pedido no encontrado'], 404);
         }
 
+        if ($pedido->tipo === 'saldo_anterior') {
+            return response()->json(['error' => true, 'mensaje' => 'Es un saldo anterior: se edita desde Cartera y Pagos'], 409);
+        }
         $usuario = $request->usuario;
         if ($usuario->rol !== 'admin' && (int) $pedido->id_vendedor !== (int) $usuario->id_usuario) {
             return response()->json(['error' => true, 'mensaje' => 'Solo puedes eliminar tus propios pedidos'], 403);
@@ -589,7 +598,7 @@ class PedidoController extends Controller
         $filtro = [];
 
         // Ventas por mes (último año)
-        $ventasMensuales = Pedido::where('estado', '!=', 'cancelado')
+        $ventasMensuales = Pedido::ventas()->where('estado', '!=', 'cancelado')
             ->where($filtro)
             ->where('fecha_pedido', '>=', Carbon::now()->subMonths(12))
             ->select(
@@ -616,7 +625,7 @@ class PedidoController extends Controller
             ->get();
 
         // Top clientes
-        $topClientes = Pedido::join('pc_clientes', 'pc_pedidos.id_cliente', '=', 'pc_clientes.id_cliente')
+        $topClientes = Pedido::ventas()->join('pc_clientes', 'pc_pedidos.id_cliente', '=', 'pc_clientes.id_cliente')
             ->where('pc_pedidos.estado', '!=', 'cancelado')
             ->where($filtro ? ['pc_pedidos.id_vendedor' => $filtro['id_vendedor']] : [])
             ->select(
@@ -630,7 +639,7 @@ class PedidoController extends Controller
             ->get();
 
         // Pedidos por estado
-        $porEstado = Pedido::where($filtro)
+        $porEstado = Pedido::ventas()->where($filtro)
             ->select('estado', DB::raw('COUNT(*) as cantidad'))
             ->groupBy('estado')
             ->get();

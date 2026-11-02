@@ -36,7 +36,7 @@ class PagoController extends Controller
             ->where('p.forma_pago', 'credito')
             ->where('p.estado', '!=', 'cancelado')
             ->select(
-                'p.id_pedido', 'p.numero_pedido', 'p.fecha_pedido', 'p.total', 'p.dias_credito', 'p.estado',
+                'p.id_pedido', 'p.numero_pedido', 'p.tipo', 'p.documento_ref', 'p.valor_original', 'p.fecha_pedido', 'p.total', 'p.dias_credito', 'p.estado',
                 'p.id_cliente', 'c.nombre as cliente_nombre', 'c.razon_social as cliente_razon', 'c.telefono as cliente_telefono',
                 'r.nombre as ruta_nombre', 'r.color as ruta_color', 'u.nombre as vendedor',
                 DB::raw('COALESCE(pg.pagado, 0) as pagado'),
@@ -52,6 +52,7 @@ class PagoController extends Controller
         if ($request->buscar) {
             $t = $request->buscar;
             $q->where(fn($w) => $w->where('p.numero_pedido', 'LIKE', "%{$t}%")
+                ->orWhere('p.documento_ref', 'LIKE', "%{$t}%")
                 ->orWhere('c.nombre', 'LIKE', "%{$t}%")
                 ->orWhere('c.razon_social', 'LIKE', "%{$t}%"));
         }
@@ -107,7 +108,7 @@ class PagoController extends Controller
     {
         $usuario = $request->usuario;
         $q = Pago::with([
-            'pedido:id_pedido,numero_pedido,total,id_vendedor',
+            'pedido:id_pedido,numero_pedido,tipo,documento_ref,total,id_vendedor',
             'cliente:id_cliente,nombre,razon_social',
             'usuario:id_usuario,nombre',
         ]);

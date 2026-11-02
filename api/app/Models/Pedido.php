@@ -12,8 +12,15 @@ class Pedido extends Model
     protected $fillable = [
         'numero_pedido', 'id_cliente', 'id_vendedor', 'id_ruta', 'fecha_pedido',
         'fecha_entrega', 'estado', 'subtotal', 'descuento', 'impuesto',
-        'total', 'notas', 'forma_pago', 'dias_credito'
+        'total', 'notas', 'forma_pago', 'dias_credito',
+        'tipo', 'documento_ref', 'valor_original'
     ];
+
+    /** Solo pedidos de venta (excluye los saldos anteriores cargados a cartera) */
+    public function scopeVentas($query)
+    {
+        return $query->where('pc_pedidos.tipo', 'pedido');
+    }
 
     public function pagos()
     {

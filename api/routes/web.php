@@ -113,6 +113,10 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     $router->get('/pagos/{id}', 'PagoController@show');
     $router->post('/pagos', 'PagoController@store');
     $router->put('/pagos/{id}/anular', 'PagoController@anular');
+    $router->get('/saldos-anteriores', 'SaldoAnteriorController@index');
+    $router->post('/saldos-anteriores', 'SaldoAnteriorController@store');
+    $router->put('/saldos-anteriores/{id}', 'SaldoAnteriorController@update');
+    $router->delete('/saldos-anteriores/{id}', 'SaldoAnteriorController@destroy');
 
     // Facturación electrónica DIAN
     $router->get('/pedidos/{id}/factura/preview', 'FacturaController@preview');
