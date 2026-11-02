@@ -4,7 +4,7 @@
 
 $router->get('/', function () use ($router) {
     return response()->json([
-        'app' => 'Pedidos Cruz API',
+        'app' => 'Pedidos Típicos API',
         'version' => '1.0.0',
         'status' => 'running'
     ]);

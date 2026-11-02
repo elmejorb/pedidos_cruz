@@ -1,5 +1,5 @@
 /* ========================================
-   PEDIDOS CRUZ - Créditos y Pagos
+   PEDIDOS TÍPICOS - Créditos y Pagos
    Pedidos a crédito, cartera y registro de abonos
    ======================================== */
 
@@ -342,7 +342,7 @@ async function crImprimirRecibo(idPago) {
     const cli = x.cliente || {};
     const html = `
         <div class="t">
-            <div class="c b big">PEDIDOS CRUZ</div>
+            <div class="c b big">${crEsc((empresaCache()?.nombre || 'Pedidos Típicos').toUpperCase())}</div>
             <div class="c">RECIBO DE PAGO No. ${String(x.id_pago).padStart(6, '0')}</div>
             <hr>
             <div class="row"><span>Fecha:</span><span>${crFecha(x.fecha)}</span></div>
@@ -444,6 +444,7 @@ async function renderCartera() {
             }
             lista = d.creditos || [];
             pintarStats(d.resumen);
+            if (!document.getElementById('cr-buscar')) return; // ya cambió de pestaña
             pintar();
             if (typeof offPintarPendientes === 'function') offPintarPendientes();
         }
@@ -600,6 +601,12 @@ async function renderCartera() {
 
     // Las stats se cargan siempre desde /cartera
     tabCartera();
+    // Desde Informes → "Pagos recibidos"
+    const tabInicial = sessionStorage.getItem('pc_cartera_tab');
+    if (tabInicial) {
+        sessionStorage.removeItem('pc_cartera_tab');
+        document.querySelector(`.cr-tab[data-tab="${tabInicial}"]`)?.click();
+    }
 }
 
 function crWhatsapp(c) {

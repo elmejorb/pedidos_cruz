@@ -1,5 +1,5 @@
 {
-    "name": "Pedidos Cruz",
+    "name": "Pedidos Típicos",
     "short_name": "Pedidos",
     "description": "Toma de pedidos y cobros para vendedores, funciona sin conexión",
     "start_url": "./",

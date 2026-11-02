@@ -16,25 +16,66 @@ const cmMoney = n => '$' + Math.round(parseFloat(n || 0)).toLocaleString('es-CO'
 const cmPct = (a, b) => b > 0 ? Math.round(a / b * 1000) / 10 : 0;
 
 /** Página Reportes con pestañas: Cierre de mes | General */
+// Portada de Informes: cada tarjeta abre un informe. Los de esta página van en #/reportes/<clave>;
+// los demás son páginas propias de la app (cartera, compras, despacho...).
+const INFORMES = [
+    { grupo: 'Ventas', items: [
+        { clave: 'cierre', titulo: 'Cierre de mes', icono: 'fa-calendar-check', color: 'purple', desc: 'Ventas del mes: contado, crédito y recaudo; por vendedor, ruta, top productos y top proveedores. Se pueden excluir pedidos.' },
+        { clave: 'general', titulo: 'Análisis de ventas', icono: 'fa-chart-line', color: 'blue', desc: 'Ventas de los últimos 12 meses, pedidos por estado y los rankings históricos de productos, clientes y proveedores.' },
+        { hash: '#/despacho', titulo: 'Despacho consolidado', icono: 'fa-truck', color: 'green', desc: 'Total de productos a alistar por ruta y fecha a partir de los pedidos seleccionados.' },
+        { hash: '#/facturas', titulo: 'Facturas electrónicas', icono: 'fa-file-circle-check', color: 'orange', desc: 'Facturas y notas crédito DIAN con su estado, totales y el envío del correo al cliente.' },
+    ] },
+    { grupo: 'Cartera y recaudo', items: [
+        { hash: '#/cartera', titulo: 'Cartera por cobrar', icono: 'fa-hand-holding-dollar', color: 'orange', desc: 'Clientes con saldo pendiente, vencimientos y saldos anteriores. Con recordatorio por WhatsApp e impresión.' },
+        { hash: '#/cartera', tab: 'pagos', titulo: 'Pagos recibidos', icono: 'fa-receipt', color: 'green', desc: 'Abonos recibidos por rango de fechas y medio de pago, con su recibo.' },
+        { hash: '#/cuentas-pagar', titulo: 'Cartera de proveedores', icono: 'fa-money-check-dollar', color: 'red', desc: 'Lo que se le debe a cada proveedor, lo vencido y los pagos realizados.' },
+    ] },
+    { grupo: 'Inventario y compras', items: [
+        { clave: 'inventario', titulo: 'Inventario', icono: 'fa-boxes-stacked', color: 'blue', desc: 'Stock actual, agotados y productos bajo el mínimo, con lo vendido en los últimos 30 días.' },
+        { hash: '#/compras', titulo: 'Compras', icono: 'fa-cart-flatbed', color: 'purple', desc: 'Compras a proveedores por período: contado y crédito, IVA, descuentos, fletes y retenciones.' },
+        { hash: '#/conteo', titulo: 'Conteos de inventario', icono: 'fa-clipboard-check', color: 'green', desc: 'Conteos físicos con las diferencias contra el sistema y los ajustes aplicados.' },
+    ] },
+];
+
+function repAbrir(i, k) {
+    const it = INFORMES[i].items[k];
+    if (it.tab) sessionStorage.setItem('pc_cartera_tab', it.tab);
+    comIrA(it.clave ? '#/reportes/' + it.clave : it.hash);
+}
+
 async function renderReportes() {
     const container = document.getElementById('page-container');
-    container.innerHTML = `
-        <div class="cr-tabs">
-            <button class="cr-tab active" data-tab="cierre"><i class="fas fa-calendar-check"></i> Cierre de mes</button>
-            <button class="cr-tab" data-tab="inventario"><i class="fas fa-boxes-stacked"></i> Inventario</button>
-            <button class="cr-tab" data-tab="general"><i class="fas fa-chart-line"></i> General</button>
-        </div>
-        <div id="rep-body"></div>`;
-    container.querySelector('.cr-tabs').onclick = e => {
-        const b = e.target.closest('.cr-tab'); if (!b) return;
-        container.querySelectorAll('.cr-tab').forEach(x => x.classList.toggle('active', x === b));
+    const clave = location.hash.replace(/^#\/?/, '').split('/')[1];
+    const informe = INFORMES.flatMap(g => g.items).find(x => x.clave && x.clave === clave);
+
+    if (informe) {
+        document.getElementById('header-title').textContent = informe.titulo;
+        container.innerHTML = `
+            <button class="btn btn-ghost rep-volver" onclick="comIrA('#/reportes')"><i class="fas fa-arrow-left"></i> Informes</button>
+            <div id="rep-body"></div>`;
         const body = document.getElementById('rep-body');
-        body.innerHTML = '<div style="text-align:center;padding:40px"><div class="loading-spinner" style="border-color:var(--border);border-top-color:var(--primary);margin:0 auto"></div></div>';
-        if (b.dataset.tab === 'cierre') renderCierreMes(body);
-        else if (b.dataset.tab === 'inventario') renderInventario(body);
+        if (clave === 'cierre') renderCierreMes(body);
+        else if (clave === 'inventario') renderInventario(body);
         else renderReportesGeneral(body);
-    };
-    renderCierreMes(document.getElementById('rep-body'));
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="rep-hub fade-in">
+            <p class="rep-intro">Selecciona el informe que necesitas. Todos se pueden imprimir o guardar como PDF.</p>
+            ${INFORMES.map((g, i) => `
+                <div class="rep-grupo">
+                    <div class="rep-grupo-titulo">${g.grupo}<span>· ${g.items.length} informes</span></div>
+                    <div class="rep-grid">
+                        ${g.items.map((it, k) => `
+                            <button type="button" class="rep-card" onclick="repAbrir(${i}, ${k})">
+                                <div class="rep-card-head"><div class="rep-icon ${it.color}"><i class="fas ${it.icono}"></i></div><h3>${it.titulo}</h3></div>
+                                <p>${it.desc}</p>
+                                <span class="rep-abrir">Abrir informe <i class="fas fa-arrow-right"></i></span>
+                            </button>`).join('')}
+                    </div>
+                </div>`).join('')}
+        </div>`;
 }
 
 async function renderCierreMes(root) {

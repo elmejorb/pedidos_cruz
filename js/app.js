@@ -1,5 +1,5 @@
 /* ========================================
-   PEDIDOS CRUZ - Main Application
+   PEDIDOS TÍPICOS - Main Application
    ======================================== */
 
 const API_BASE = 'https://pedidosgb.innovacion-digital.com/api/public';
@@ -152,7 +152,7 @@ const escHTML = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '
 /** Encabezado de ticket 80mm con el nombre y los datos reales de la empresa */
 function encabezadoEmpresaTicket(e) {
     if (!e || !e.nombre) {
-        return `<div class="center bold" style="font-size:18px;margin-bottom:2px">PEDIDOS CRUZ</div>
+        return `<div class="center bold" style="font-size:18px;margin-bottom:2px">PEDIDOS TÍPICOS</div>
             <div class="center" style="font-size:11px;margin-bottom:8px">Sistema de Gestión de Pedidos</div>`;
     }
     return `
@@ -372,7 +372,7 @@ function navigateTo(page, options = {}) {
         'nuevo-pedido': 'Nuevo Pedido',
         'clientes': 'Clientes',
         'productos': 'Productos',
-        'reportes': 'Reportes',
+        'reportes': 'Informes',
         'usuarios': 'Usuarios',
         'categorias': 'Categorías',
         'detalle-pedido': 'Detalle del Pedido',
@@ -389,7 +389,7 @@ function navigateTo(page, options = {}) {
         'config-fe': 'Configuración Facturación Electrónica',
     };
 
-    document.getElementById('header-title').textContent = titles[page] || 'Pedidos Cruz';
+    document.getElementById('header-title').textContent = titles[page] || 'Pedidos Típicos';
 
     // Block admin-only pages for vendedores
     const adminPages = ['usuarios', 'categorias', 'productos', 'reportes', 'dashboard', 'rutas', 'despacho', 'facturas', 'config-fe', 'conteo', 'compras', 'cuentas-pagar', 'proveedores'];
@@ -3190,7 +3190,7 @@ function printDespachoTicket(data) {
             </style>
         </head>
         <body>
-            <div class="center bold" style="font-size:18px;margin-bottom:2px">PEDIDOS CRUZ</div>
+            <div class="center bold" style="font-size:18px;margin-bottom:2px">${escHTML((empresaCache()?.nombre || 'Pedidos Típicos').toUpperCase())}</div>
             <div class="center bold" style="font-size:14px;margin-bottom:8px">INFORME DE DESPACHO</div>
             <div class="divider"></div>
 
@@ -3256,7 +3256,7 @@ async function printDespachoDirect(data) {
 
     // Header
     b.align(1).bold(true).size(2, 2);
-    b.line('PEDIDOS CRUZ');
+    b.line((empresaCache()?.nombre || 'Pedidos Tipicos').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
     b.size(1, 1).bold(true);
     b.line('INFORME DE DESPACHO');
     b.bold(false).divider();
@@ -3653,7 +3653,7 @@ function printHTML(bodyContent) {
         <html>
         <head>
             <meta charset="UTF-8">
-            <title>Pedidos Cruz - Impresión</title>
+            <title>Pedidos Típicos - Impresión</title>
             <style>
                 * { box-sizing: border-box; margin: 0; padding: 0; }
                 body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #1a1a1a; font-size: 13px; }
@@ -3675,7 +3675,7 @@ function printHTML(bodyContent) {
         </head>
         <body>
             <div class="print-header">
-                <h2>${escHTML(empresaCache()?.nombre || 'Pedidos Cruz')}${empresaCache()?.nit ? `<span style="display:block;font-size:12px;font-weight:500;color:#666">NIT ${escHTML(empresaCache().nit)}</span>` : ''}</h2>
+                <h2>${escHTML(empresaCache()?.nombre || 'Pedidos Típicos')}${empresaCache()?.nit ? `<span style="display:block;font-size:12px;font-weight:500;color:#666">NIT ${escHTML(empresaCache().nit)}</span>` : ''}</h2>
                 <span>${new Date().toLocaleDateString('es-CO')}</span>
             </div>
             ${bodyContent}
