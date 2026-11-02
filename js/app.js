@@ -2511,7 +2511,9 @@ async function renderReportesGeneral(container = document.getElementById('page-c
     const r = data.data;
 
     container.innerHTML = `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px" class="fade-in">
+        <div class="cm-bar"><span class="inf-corte"><i class="fas fa-calendar-day"></i> Últimos 12 meses e histórico</span>
+            <button class="btn btn-primary btn-sm" id="ag-print"><i class="fas fa-print"></i> Imprimir / PDF</button></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px" class="fade-in inf-g2">
             <div class="card">
                 <div class="card-header"><h3><i class="fas fa-chart-bar" style="color:var(--primary);margin-right:8px"></i>Ventas Mensuales</h3></div>
                 <div class="card-body"><div class="chart-container"><canvas id="chart-mensual"></canvas></div></div>
@@ -2521,7 +2523,7 @@ async function renderReportesGeneral(container = document.getElementById('page-c
                 <div class="card-body"><div class="chart-container"><canvas id="chart-estados"></canvas></div></div>
             </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px" class="fade-in">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px" class="fade-in inf-g2">
             <div class="card">
                 <div class="card-header"><h3><i class="fas fa-trophy" style="color:var(--success);margin-right:8px"></i>Top Productos</h3></div>
                 <div class="card-body" style="padding:0">
@@ -2570,6 +2572,16 @@ async function renderReportesGeneral(container = document.getElementById('page-c
             </div>
         </div>` : ''}
     `;
+
+    document.getElementById('ag-print').onclick = () => {
+        const img = id => { const c = document.getElementById(id); return c ? `<img src="${c.toDataURL('image/png')}" style="width:100%;max-height:260px;object-fit:contain">` : ''; };
+        const t = (tit, cols, l) => `<h3 style="margin:16px 0 4px;font-size:13px;text-transform:uppercase">${tit}</h3><table><thead><tr>${cols.map(c => `<th${c[2] ? ' style="text-align:right"' : ''}>${c[0]}</th>`).join('')}</tr></thead><tbody>${l.map((x, i) => `<tr>${cols.map(c => `<td${c[2] ? ' style="text-align:right"' : ''}>${c[1](x, i)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+        printHTML(`<h1>Análisis gráfico de ventas</h1><p style="color:#666;margin-bottom:12px">Últimos 12 meses e histórico · Generado: ${new Date().toLocaleString('es-CO')}</p>
+            <div style="display:grid;grid-template-columns:3fr 2fr;gap:16px;align-items:center">${img('chart-mensual')}${img('chart-estados')}</div>
+            ${t('Top productos', [['#', (x, i) => i + 1], ['Producto', x => escHTML(x.nombre)], ['Unidades', x => formatNumber(x.total_vendido), 1], ['Total', x => '$' + formatNumber(x.total_ingresos), 1]], r.top_productos || [])}
+            ${t('Top clientes', [['#', (x, i) => i + 1], ['Cliente', x => escHTML(x.nombre)], ['Pedidos', x => x.total_pedidos, 1], ['Total', x => '$' + formatNumber(x.total_compras), 1]], r.top_clientes || [])}
+            ${t('Top proveedores', [['#', (x, i) => i + 1], ['Proveedor', x => escHTML(x.nombre)], ['Productos', x => x.productos, 1], ['Unidades', x => formatNumber(x.unidades), 1], ['Total', x => '$' + formatNumber(x.total), 1]], r.top_proveedores || [])}`);
+    };
 
     // Chart ventas mensuales - llenar últimos 12 meses con ceros
     const mesesShort = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];

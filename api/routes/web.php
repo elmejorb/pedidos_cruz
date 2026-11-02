@@ -75,6 +75,15 @@ $router->group(['middleware' => 'auth'], function () use ($router) {
     $router->get('/reportes/ventas', 'PedidoController@reporteVentas');
     $router->get('/reportes/cierre', 'ReporteController@cierre');
     $router->get('/reportes/stock', 'ReporteController@stock');
+    $router->get('/informes/ventas', 'InformeController@ventas');
+    $router->get('/informes/comparativo', 'InformeController@comparativo');
+    $router->get('/informes/cartera-edades', 'InformeController@carteraEdades');
+    $router->get('/informes/estado-cuenta/{idCliente}', 'InformeController@estadoCuenta');
+    $router->get('/informes/recaudo', 'InformeController@recaudo');
+    $router->get('/informes/inventario-valorizado', 'InformeController@inventarioValorizado');
+    $router->get('/informes/compras', 'InformeController@compras');
+    $router->get('/informes/cxp-edades', 'InformeController@cxpEdades');
+    $router->get('/informes/facturacion', 'InformeController@facturacion');
 
     // Conteo de inventario
     $router->get('/conteos', 'ConteoController@index');

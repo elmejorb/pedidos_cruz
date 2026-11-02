@@ -20,27 +20,31 @@ const cmPct = (a, b) => b > 0 ? Math.round(a / b * 1000) / 10 : 0;
 // los demás son páginas propias de la app (cartera, compras, despacho...).
 const INFORMES = [
     { grupo: 'Ventas', items: [
-        { clave: 'cierre', titulo: 'Cierre de mes', icono: 'fa-calendar-check', color: 'purple', desc: 'Ventas del mes: contado, crédito y recaudo; por vendedor, ruta, top productos y top proveedores. Se pueden excluir pedidos.' },
-        { clave: 'general', titulo: 'Análisis de ventas', icono: 'fa-chart-line', color: 'blue', desc: 'Ventas de los últimos 12 meses, pedidos por estado y los rankings históricos de productos, clientes y proveedores.' },
-        { hash: '#/despacho', titulo: 'Despacho consolidado', icono: 'fa-truck', color: 'green', desc: 'Total de productos a alistar por ruta y fecha a partir de los pedidos seleccionados.' },
-        { hash: '#/facturas', titulo: 'Facturas electrónicas', icono: 'fa-file-circle-check', color: 'orange', desc: 'Facturas y notas crédito DIAN con su estado, totales y el envío del correo al cliente.' },
+        { clave: 'cierre', titulo: 'Cierre de mes', icono: 'fa-calendar-check', color: 'purple', desc: 'Ventas del mes: contado, crédito y recaudo; por vendedor, ruta, top productos y proveedores. Se pueden excluir pedidos.' },
+        { clave: 'ventas', titulo: 'Ventas por período', icono: 'fa-chart-column', color: 'blue', desc: 'Cualquier rango de fechas: ventas por día, vendedor, ruta, cliente, producto, categoría y proveedor, comparado con el período anterior.' },
+        { clave: 'clientes', titulo: 'Ventas por cliente', icono: 'fa-users', color: 'green', desc: 'Ranking de clientes con % y % acumulado (quiénes hacen el 80% de las ventas) y los clientes que no compraron en el período.' },
+        { clave: 'productos', titulo: 'Ventas por producto', icono: 'fa-boxes-stacked', color: 'orange', desc: 'Unidades, valor, % y precio promedio por producto, categoría o proveedor.' },
+        { clave: 'comparativo', titulo: 'Comparativo anual', icono: 'fa-chart-simple', color: 'purple', desc: 'Ventas, pedidos o clientes mes a mes entre varios años, con la variación para ver crecimiento y meses fuertes.' },
+        { clave: 'general', titulo: 'Análisis gráfico', icono: 'fa-chart-line', color: 'blue', desc: 'Ventas de los últimos 12 meses, pedidos por estado y rankings históricos de productos, clientes y proveedores.' },
     ] },
     { grupo: 'Cartera y recaudo', items: [
-        { hash: '#/cartera', titulo: 'Cartera por cobrar', icono: 'fa-hand-holding-dollar', color: 'orange', desc: 'Clientes con saldo pendiente, vencimientos y saldos anteriores. Con recordatorio por WhatsApp e impresión.' },
-        { hash: '#/cartera', tab: 'pagos', titulo: 'Pagos recibidos', icono: 'fa-receipt', color: 'green', desc: 'Abonos recibidos por rango de fechas y medio de pago, con su recibo.' },
-        { hash: '#/cuentas-pagar', titulo: 'Cartera de proveedores', icono: 'fa-money-check-dollar', color: 'red', desc: 'Lo que se le debe a cada proveedor, lo vencido y los pagos realizados.' },
+        { clave: 'cartera', titulo: 'Cartera por edades', icono: 'fa-hourglass-half', color: 'orange', desc: 'Lo que deben los clientes por antigüedad: por vencer, 1-30, 31-60, 61-90 y más de 90 días, con detalle por documento.' },
+        { clave: 'estado-cuenta', titulo: 'Estado de cuenta de cliente', icono: 'fa-file-invoice-dollar', color: 'blue', desc: 'Documentos, abonos y saldo de un cliente, listo para imprimir o enviar en PDF.' },
+        { clave: 'recaudo', titulo: 'Recaudo', icono: 'fa-sack-dollar', color: 'green', desc: 'Contado + abonos del período por día, medio de pago, quién recibió y cliente, con el detalle de recibos.' },
     ] },
     { grupo: 'Inventario y compras', items: [
-        { clave: 'inventario', titulo: 'Inventario', icono: 'fa-boxes-stacked', color: 'blue', desc: 'Stock actual, agotados y productos bajo el mínimo, con lo vendido en los últimos 30 días.' },
-        { hash: '#/compras', titulo: 'Compras', icono: 'fa-cart-flatbed', color: 'purple', desc: 'Compras a proveedores por período: contado y crédito, IVA, descuentos, fletes y retenciones.' },
-        { hash: '#/conteo', titulo: 'Conteos de inventario', icono: 'fa-clipboard-check', color: 'green', desc: 'Conteos físicos con las diferencias contra el sistema y los ajustes aplicados.' },
+        { clave: 'inventario', titulo: 'Inventario y reposición', icono: 'fa-boxes-stacked', color: 'blue', desc: 'Agotados y productos bajo el mínimo, con lo vendido en los últimos 30 días para saber qué pedir.' },
+        { clave: 'valorizado', titulo: 'Inventario valorizado', icono: 'fa-coins', color: 'purple', desc: 'Existencias al costo y a precio de venta, utilidad potencial y margen, por categoría o proveedor.' },
+        { clave: 'compras', titulo: 'Compras por período', icono: 'fa-cart-flatbed', color: 'orange', desc: 'Compras por proveedor y producto con subtotal, descuentos, IVA, fletes, retenciones y pagos realizados.' },
+        { clave: 'cxp', titulo: 'Cuentas por pagar por edades', icono: 'fa-money-check-dollar', color: 'red', desc: 'Lo que se debe a cada proveedor por antigüedad, con el detalle de facturas y vencimientos.' },
+    ] },
+    { grupo: 'Facturación', items: [
+        { clave: 'facturacion', titulo: 'Facturación electrónica', icono: 'fa-file-circle-check', color: 'green', desc: 'Para el contador: facturas y notas crédito del período, base e IVA por tarifa y total neto.' },
     ] },
 ];
 
 function repAbrir(i, k) {
-    const it = INFORMES[i].items[k];
-    if (it.tab) sessionStorage.setItem('pc_cartera_tab', it.tab);
-    comIrA(it.clave ? '#/reportes/' + it.clave : it.hash);
+    comIrA('#/reportes/' + INFORMES[i].items[k].clave);
 }
 
 async function renderReportes() {
@@ -56,13 +60,14 @@ async function renderReportes() {
         const body = document.getElementById('rep-body');
         if (clave === 'cierre') renderCierreMes(body);
         else if (clave === 'inventario') renderInventario(body);
-        else renderReportesGeneral(body);
+        else if (clave === 'general') renderReportesGeneral(body);
+        else infRender(clave, body);
         return;
     }
 
     container.innerHTML = `
         <div class="rep-hub fade-in">
-            <p class="rep-intro">Selecciona el informe que necesitas. Todos se pueden imprimir o guardar como PDF.</p>
+            <p class="rep-intro">Selecciona el informe que necesitas. Todos tienen filtros, se imprimen o guardan como PDF y se exportan a Excel.</p>
             ${INFORMES.map((g, i) => `
                 <div class="rep-grupo">
                     <div class="rep-grupo-titulo">${g.grupo}<span>· ${g.items.length} informes</span></div>
