@@ -219,13 +219,16 @@ class FacturaController extends Controller
         if (!$factura) return response()->json(['error' => true, 'mensaje' => 'Factura no encontrada'], 404);
 
         $res = (new FacturacionElectronicaService())->notaCredito(
-            $factura, (int) $request->concepto, trim($request->motivo), (array) $request->input('lineas', []), $request->usuario->id_usuario
+            $factura, (int) $request->concepto, trim($request->motivo), (array) $request->input('lineas', []), $request->usuario->id_usuario,
+            filter_var($request->input('confirmar_reenvio', false), FILTER_VALIDATE_BOOLEAN)
         );
         return response()->json([
             'error' => !$res['ok'],
             'mensaje' => $res['mensaje'],
             'errores' => $res['errores'] ?? [],
             'nota' => $res['nota'] ?? null,
+            'verificar' => $res['verificar'] ?? false,
+            'requiere_confirmacion' => $res['requiere_confirmacion'] ?? false,
         ], $res['ok'] ? 200 : ($res['http'] ?? 422));
     }
 

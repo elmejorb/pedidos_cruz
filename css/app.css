@@ -1867,6 +1867,9 @@ body {
 .fe-nc-grid div { display: flex; flex-direction: column; font-size: 13px; }
 .fe-nc-grid span { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
 .fe-nc-motivo { margin-top: 10px; font-size: 13px; background: var(--bg); padding: 8px 12px; border-radius: var(--radius-sm); }
+.fe-nc-avisos { margin-top: 10px; font-size: 12.5px; color: #8a5a00; background: #fff7e0; border: 1px solid #f3dca0; padding: 8px 12px; border-radius: var(--radius-sm); }
+.fe-nc-avisos ul { margin: 6px 0 0 18px; padding: 0; }
+.fe-nc-avisos code { font-weight: 700; }
 
 .fe-btn-main { background: var(--gradient-green); color: #fff; border: none; box-shadow: 0 4px 14px rgba(16,185,129,.35); }
 .fe-btn-main:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(16,185,129,.45); }

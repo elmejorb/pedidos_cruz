@@ -608,12 +608,20 @@ async function viewFactura(id, skipHash = false) {
                             ${(n.detalles || []).length ? `
                                 <div class="fe-nc-lineas">${n.detalles.map(d => `<div><span>${formatNumber(d.cantidad)} × ${feEsc(d.descripcion)}</span><b>${feMoney(d.total)}</b></div>`).join('')}</div>` : ''}
                             <div class="fe-nc-motivo"><b>Motivo:</b> ${feEsc(n.motivo)}</div>
+                            ${(n.errores || []).length ? `
+                                <div class="fe-nc-avisos" title="La DIAN las informa pero no impiden la autorización">
+                                    <div><i class="fas fa-circle-info"></i> Notificaciones de la DIAN (no afectan la validez)</div>
+                                    <ul>${n.errores.map(e => `<li><code>${feEsc(e.code || '')}</code> ${feEsc(e.message || '')}</li>`).join('')}</ul>
+                                </div>` : ''}
+                            ${/^Recuperada/.test(n.mensaje_dian || '') ? `<div class="fe-nc-avisos"><i class="fas fa-rotate"></i> ${feEsc(n.mensaje_dian)}</div>` : ''}
                             <div class="fe-cufe" style="margin:10px 0 0;max-width:none">CUDE: ${feEsc(n.cufe || '')}</div>
                         </div>
                     </div>`).join('')}
                 ${ok && ncFallidas.length ? `
                     <div class="fe-alert warning" style="margin-bottom:20px">
-                        <div class="fe-alert-title"><i class="fas fa-triangle-exclamation"></i> Último intento de nota crédito fallido</div>
+                        <div class="fe-alert-title"><i class="fas fa-triangle-exclamation"></i> ${ncFallidas[ncFallidas.length - 1].status_code === 'VERIFICAR'
+                            ? 'Nota crédito sin confirmar: verifica con soporte de la API DIAN antes de reintentar'
+                            : 'Último intento de nota crédito fallido'}</div>
                         ${feEsc(ncFallidas[ncFallidas.length - 1].mensaje_dian || '')}
                         ${(ncFallidas[ncFallidas.length - 1].errores || []).length ? `<ul>${ncFallidas[ncFallidas.length - 1].errores.map(e => `<li><code>${feEsc(e.code)}</code> ${feEsc(e.message)}</li>`).join('')}</ul>` : ''}
                     </div>` : ''}
@@ -1543,7 +1551,21 @@ async function feAnular(id) {
             </div>`;
         $('modal-footer').innerHTML = '';
 
-        const r = await api(`/facturas/${id}/nota-credito`, { method: 'POST', body: JSON.stringify(body) });
+        let r = await api(`/facturas/${id}/nota-credito`, { method: 'POST', body: JSON.stringify(body) });
+        if (r?.requiere_confirmacion) {
+            // Un envío anterior quedó sin respuesta: la DIAN pudo haberlo recibido
+            if (await confirmar(feEsc(r.mensaje || ''), {
+                titulo: 'Envío anterior sin confirmar', ok: '<i class="fas fa-paper-plane"></i> Ya verifiqué, enviar', tipo: 'dian', icono: 'fa-triangle-exclamation',
+            })) {
+                $('modal-body').innerHTML = `
+                    <div class="fe-sending">
+                        <div class="fe-sending-icon" style="background:var(--gradient-warm)"><i class="fas fa-file-circle-minus"></i></div>
+                        <h3>Enviando Nota Crédito a la DIAN...</h3>
+                        <p>Firmando y validando el documento. No cierres esta ventana.</p>
+                    </div>`;
+                r = await api(`/facturas/${id}/nota-credito`, { method: 'POST', body: JSON.stringify({ ...body, confirmar_reenvio: true }) });
+            } else { closeModal(); viewFactura(id); return; }
+        }
         if (r && !r.error) {
             const n = r.nota || {};
             $('modal-body').innerHTML = `
@@ -1562,8 +1584,8 @@ async function feAnular(id) {
             const errores = r?.errores?.length ? r.errores : [];
             $('modal-body').innerHTML = `
                 <div class="fe-result bad">
-                    <div class="fe-result-icon"><i class="fas fa-xmark"></i></div>
-                    <h3>No se pudo emitir la nota crédito</h3>
+                    <div class="fe-result-icon"><i class="fas ${r?.verificar ? 'fa-triangle-exclamation' : 'fa-xmark'}"></i></div>
+                    <h3>${r?.verificar ? 'Nota crédito sin confirmar' : 'No se pudo emitir la nota crédito'}</h3>
                     <p>${feEsc(r?.mensaje || 'Error desconocido')}</p>
                 </div>
                 ${errores.length ? `<div class="fe-alert danger"><ul>${errores.map(e => `<li>${feEsc(e)}</li>`).join('')}</ul></div>` : ''}`;
